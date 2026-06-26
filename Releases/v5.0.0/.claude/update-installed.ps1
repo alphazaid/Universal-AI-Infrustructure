@@ -802,6 +802,11 @@ function Initialize-PAIEnvironment {
   if (-not `$env:PAI_DIR -or -not (Test-Path -LiteralPath `$env:PAI_DIR)) { `$env:PAI_DIR = '$qPai' }
   if (-not `$env:PAI_FRAMEWORK) { `$env:PAI_FRAMEWORK = '$qFramework' }
   if (-not `$env:PAI_CONFIG_DIR -or -not (Test-Path -LiteralPath `$env:PAI_CONFIG_DIR)) { `$env:PAI_CONFIG_DIR = '$qConfig' }
+  `$env:UAI_DIR = `$env:PAI_DIR
+  `$env:UAI_DATA_DIR = `$env:PAI_DATA_DIR
+  `$env:UAI_CONFIG_DIR = `$env:PAI_CONFIG_DIR
+  `$env:UAI_FRAMEWORK_DIR = `$env:PAI_FRAMEWORK_DIR
+  `$env:UAI_FRAMEWORK = `$env:PAI_FRAMEWORK
 }
 Initialize-PAIEnvironment
 function Invoke-PAI {
@@ -809,6 +814,9 @@ function Invoke-PAI {
   bun '$qScript' @args
 }
 function pai {
+  Invoke-PAI @args
+}
+function uai {
   Invoke-PAI @args
 }
 function k {
