@@ -261,6 +261,25 @@ $backup = Get-ChildItem "$HOME\.pai\BACKUPS" -Directory -Filter "hotfix-*" | Sor
 Get-ChildItem -LiteralPath $backup.FullName -Force | Copy-Item -Destination $env:CODEX_HOME -Recurse -Force
 ```
 
+### Convert an existing PAI install to UAI
+
+Already running upstream PAI and want to switch it to UAI? Clone this repo and run the converter — a thin wrapper over the hotfix updater that overlays UAI's managed files onto the framework install recorded in `~/.pai/framework.json` and writes a `~/.pai/distribution.json` marker. It preserves `USER`, `MEMORY`, settings, config, auth, env files, and hook trust state.
+
+```bash
+git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git
+cd Universal-AI-Infrustructure/Releases/v5.0.0/.claude
+bash ./convert-to-uai.sh            # --dry-run to preview, --fetch to pull latest
+```
+
+Windows PowerShell:
+
+```powershell
+cd Universal-AI-Infrustructure\Releases\v5.0.0\.claude
+powershell -ExecutionPolicy Bypass -File .\convert-to-uai.ps1   # -DryRun to preview, -Fetch for latest
+```
+
+Restart your agent session afterward so instructions reload.
+
 ### Manual install (clone + run)
 
 ```bash
