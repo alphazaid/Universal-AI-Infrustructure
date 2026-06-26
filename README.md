@@ -7,9 +7,9 @@
 <div align="center">
 
 <picture>
-  <source media="(prefers-color-scheme: dark)" srcset="./images/pai-logo-v7.png">
-  <source media="(prefers-color-scheme: light)" srcset="./images/pai-logo-v7.png">
-  <img alt="PAI Logo" src="./images/pai-logo-v7.png" width="300">
+  <source media="(prefers-color-scheme: dark)" srcset="./images/uai-logo.svg">
+  <source media="(prefers-color-scheme: light)" srcset="./images/uai-logo.svg">
+  <img alt="UAI Logo" src="./images/uai-logo.svg" width="320">
 </picture>
 
 <br/>
@@ -19,35 +19,32 @@
 
 **A fork of [Personal AI Infrastructure (PAI)](https://github.com/danielmiessler/Personal_AI_Infrastructure) by [Daniel Miessler](https://danielmiessler.com)**
 
-[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&weight=500&size=24&pause=1000&color=60A5FA&center=true&vCenter=true&width=600&lines=Everyone+needs+access+to+the+best+AI.;AI+should+magnify+everyone.;Your+Life+Operating+System.)](https://github.com/danielmiessler/Personal_AI_Infrastructure)
+[![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&weight=500&size=24&pause=1000&color=60A5FA&center=true&vCenter=true&width=600&lines=Everyone+needs+access+to+the+best+AI.;AI+should+magnify+everyone.;Your+Life+Operating+System.)](https://github.com/jSydorowicz21/Universal-AI-Infrustructure)
 
 <br/>
 
-<sub>📊 The GitHub stat badges below reflect the <a href="https://github.com/danielmiessler/Personal_AI_Infrastructure">upstream PAI project</a> this fork is built on — not the UAI fork itself.</sub>
-
 <!-- Social Proof -->
-![Stars](https://img.shields.io/github/stars/danielmiessler/Personal_AI_Infrastructure?style=social)
-![Forks](https://img.shields.io/github/forks/danielmiessler/Personal_AI_Infrastructure?style=social)
-![Watchers](https://img.shields.io/github/watchers/danielmiessler/Personal_AI_Infrastructure?style=social)
+![Stars](https://img.shields.io/github/stars/jSydorowicz21/Universal-AI-Infrustructure?style=social)
+![Forks](https://img.shields.io/github/forks/jSydorowicz21/Universal-AI-Infrustructure?style=social)
+![Watchers](https://img.shields.io/github/watchers/jSydorowicz21/Universal-AI-Infrustructure?style=social)
 
 <!-- Project Health -->
-![Release](https://img.shields.io/github/v/release/danielmiessler/Personal_AI_Infrastructure?style=flat&logo=github&color=8B5CF6)
-![Last Commit](https://img.shields.io/github/last-commit/danielmiessler/Personal_AI_Infrastructure?style=flat&logo=git&color=22C55E)
-![Open Issues](https://img.shields.io/github/issues/danielmiessler/Personal_AI_Infrastructure?style=flat&logo=github&color=F97316)
-![Open PRs](https://img.shields.io/github/issues-pr/danielmiessler/Personal_AI_Infrastructure?style=flat&logo=github&color=EC4899)
-![License](https://img.shields.io/github/license/danielmiessler/Personal_AI_Infrastructure?style=flat&color=60A5FA)
+![Release](https://img.shields.io/github/v/release/jSydorowicz21/Universal-AI-Infrustructure?style=flat&logo=github&color=8B5CF6)
+![Last Commit](https://img.shields.io/github/last-commit/jSydorowicz21/Universal-AI-Infrustructure?style=flat&logo=git&color=22C55E)
+![Open Issues](https://img.shields.io/github/issues/jSydorowicz21/Universal-AI-Infrustructure?style=flat&logo=github&color=F97316)
+![Open PRs](https://img.shields.io/github/issues-pr/jSydorowicz21/Universal-AI-Infrustructure?style=flat&logo=github&color=EC4899)
+![License](https://img.shields.io/github/license/jSydorowicz21/Universal-AI-Infrustructure?style=flat&color=60A5FA)
 
 <!-- Metrics -->
-![Discussions](https://img.shields.io/github/discussions/danielmiessler/Personal_AI_Infrastructure?style=flat&logo=github&label=Discussions&color=EAB308)
-![Commit Activity](https://img.shields.io/github/commit-activity/m/danielmiessler/Personal_AI_Infrastructure?style=flat&logo=git&label=Commits%2Fmo&color=F59E0B)
-![Repo Size](https://img.shields.io/github/repo-size/danielmiessler/Personal_AI_Infrastructure?style=flat&logo=database&label=Repo%20Size&color=D97706)
+![Commit Activity](https://img.shields.io/github/commit-activity/m/jSydorowicz21/Universal-AI-Infrustructure?style=flat&logo=git&label=Commits%2Fmo&color=F59E0B)
+![Repo Size](https://img.shields.io/github/repo-size/jSydorowicz21/Universal-AI-Infrustructure?style=flat&logo=database&label=Repo%20Size&color=D97706)
 
 <!-- Content -->
 [![Get Started](https://img.shields.io/badge/🚀_Get_Started-Install-22C55E?style=flat)](#-installation)
 [![Release v5.0.0](https://img.shields.io/badge/📦_Release-v5.0.0-8B5CF6?style=flat)](Releases/v5.0.0/)
 [![Algorithm v6.3.0](https://img.shields.io/badge/Algorithm-v6.3.0-D97706?style=flat)](Releases/v5.0.0/.claude/PAI/ALGORITHM/v6.3.0.md)
 [![Pulse](https://img.shields.io/badge/Pulse-included-3B82F6?style=flat)](Releases/v5.0.0/.claude/PAI/PULSE/)
-[![Contributors](https://img.shields.io/github/contributors/danielmiessler/Personal_AI_Infrastructure?style=flat&logo=githubsponsors&logoColor=white&label=Contributors&color=EC4899)](https://github.com/danielmiessler/Personal_AI_Infrastructure/graphs/contributors)
+[![Contributors](https://img.shields.io/github/contributors/jSydorowicz21/Universal-AI-Infrustructure?style=flat&logo=githubsponsors&logoColor=white&label=Contributors&color=EC4899)](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/graphs/contributors)
 
 <!-- Tech Stack -->
 [![Built with Claude](https://img.shields.io/badge/Built_with-Claude-D4A574?style=flat&logo=anthropic&logoColor=white)](https://claude.ai)
@@ -193,13 +190,17 @@ A meaningful library of custom thinking skills — first principles, council deb
 
 We very much believe in AI-based installation and modification of PAI. Once you have a working install, point your AI at the system itself — upgrade versions, add skills, modify hooks, change settings, repair anything that breaks. The most important thing your AI can do for you up front is bring all of your existing custom context — notes, project state, preferences, identity, history — into the `PAI/USER/` directory so PAI knows who you are from day one. Tell your DA: *"Help me migrate my context into PAI/USER/."* The system was designed to be operated by AI; lean on it.
 
-### One-line install (recommended)
+### Install (clone + run)
+
+UAI has no hosted one-line installer of its own — clone this repo and run the bundled installer:
 
 ```bash
-curl -sSL https://ourpai.ai/install.sh | bash
+git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git
+cd Universal-AI-Infrustructure/Releases/v5.0.0
+cp -R .claude ~/ && cd ~/.claude && ./install.sh
 ```
 
-Windows PowerShell from a cloned release bundle:
+Windows PowerShell from the cloned release bundle:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\.claude\install.ps1
@@ -207,7 +208,7 @@ powershell -ExecutionPolicy Bypass -File .\.claude\install.ps1
 
 That's it. The installer wizard handles Bun, Git, framework selection, agent CLI verification, ElevenLabs key (optional), DA identity setup, voice picker, Pulse launchd registration, and validation. You can target Claude Code, Codex, or OpenCode. The selected framework home is auto-backed-up before anything is overwritten.
 
-**Prefer to inspect first?** [Read the script](https://ourpai.ai/install.sh) before piping it.
+> **Note:** Upstream PAI offers a hosted one-liner (`curl -sSL https://ourpai.ai/install.sh | bash`) that installs the **original PAI**, not this fork. Always inspect `Releases/v5.0.0/.claude/install.sh` in your clone before running it.
 
 After install, or any time startup reports a PAI self-check warning, run `k doctor` for AV-safe local diagnostics across the active framework config, hooks/plugins, Pulse, and MCP profiles. Use `k doctor --smoke` for static source smoke checks, or `k doctor --deep` when you intentionally want child/session/install probes.
 
@@ -230,7 +231,7 @@ bash ./Releases/v5.0.0/.claude/update-installed.sh --framework codex --source-di
 From a machine that already has PAI installed but needs the latest updater from this branch:
 
 ```powershell
-$u = "https://raw.githubusercontent.com/haydencj/Personal_AI_Infrastructure/pai-codex-flawless-runtime/Releases/v5.0.0/.claude/update-installed.ps1"
+$u = "https://raw.githubusercontent.com/jSydorowicz21/Universal-AI-Infrustructure/main/Releases/v5.0.0/.claude/update-installed.ps1"
 $p = Join-Path $env:TEMP "pai-update-installed.ps1"
 Invoke-WebRequest $u -OutFile $p
 powershell -NoProfile -ExecutionPolicy Bypass -File $p -Framework codex
@@ -239,7 +240,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File $p -Framework codex
 macOS/Linux/WSL:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/haydencj/Personal_AI_Infrastructure/pai-codex-flawless-runtime/Releases/v5.0.0/.claude/update-installed.sh | bash -s -- --framework codex
+curl -fsSL https://raw.githubusercontent.com/jSydorowicz21/Universal-AI-Infrustructure/main/Releases/v5.0.0/.claude/update-installed.sh | bash -s -- --framework codex
 ```
 
 Use `-Framework claude` or `-Framework opencode` for those targets, or omit `-Framework` to let the updater read `~/.pai/framework.json`.
@@ -263,8 +264,8 @@ Get-ChildItem -LiteralPath $backup.FullName -Force | Copy-Item -Destination $env
 ### Manual install (clone + run)
 
 ```bash
-git clone https://github.com/danielmiessler/Personal_AI_Infrastructure.git
-cd Personal_AI_Infrastructure/Releases/v5.0.0
+git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git
+cd Universal-AI-Infrustructure/Releases/v5.0.0
 cp -R .claude ~/
 cd ~/.claude && ./install.sh
 ```
@@ -410,21 +411,24 @@ Recovery is straightforward:
 
 ## 🌐 Community
 
-**GitHub Discussions:** [Join the conversation](https://github.com/danielmiessler/Personal_AI_Infrastructure/discussions)
+**UAI (this fork):**
 
-**Community Discord:** PAI is discussed in the [community Discord](https://danielmiessler.com/upgrade) along with other AI projects
+- **GitHub Discussions:** [Join the conversation](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/discussions)
+- **Issues:** [Report bugs or request features](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/issues)
 
-**Twitter/X:** [@danielmiessler](https://twitter.com/danielmiessler)
+**Upstream PAI (Daniel Miessler):**
 
-**Blog:** [danielmiessler.com](https://danielmiessler.com)
+- **Discord:** PAI is discussed in the [community Discord](https://danielmiessler.com/upgrade)
+- **Twitter/X:** [@danielmiessler](https://twitter.com/danielmiessler)
+- **Blog:** [danielmiessler.com](https://danielmiessler.com)
 
 ### Star History
 
-<a href="https://star-history.com/#danielmiessler/Personal_AI_Infrastructure&Date">
+<a href="https://star-history.com/#jSydorowicz21/Universal-AI-Infrustructure&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=danielmiessler/Personal_AI_Infrastructure&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=danielmiessler/Personal_AI_Infrastructure&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=danielmiessler/Personal_AI_Infrastructure&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=jSydorowicz21/Universal-AI-Infrustructure&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=jSydorowicz21/Universal-AI-Infrustructure&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=jSydorowicz21/Universal-AI-Infrustructure&type=Date" />
  </picture>
 </a>
 
@@ -432,7 +436,7 @@ Recovery is straightforward:
 
 ## 🤝 Contributing
 
-We welcome contributions! See our [GitHub Issues](https://github.com/danielmiessler/Personal_AI_Infrastructure/issues) for open tasks.
+We welcome contributions! See our [GitHub Issues](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/issues) for open tasks.
 
 1. **Fork the repository**
 2. **Make your changes** — Bug fixes, new skills, documentation improvements
