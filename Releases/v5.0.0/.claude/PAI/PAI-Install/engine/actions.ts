@@ -867,6 +867,7 @@ function paiShellCommand(profileKind: "posix" | "fish" | "powershell", dataDir: 
     const command = `env PAI_DIR=${JSON.stringify(paiDir)} PAI_FRAMEWORK_DIR=${JSON.stringify(frameworkDir)} PAI_FRAMEWORK=${JSON.stringify(framework)} PAI_DATA_DIR=${JSON.stringify(dataDir)} bun ${JSON.stringify(paiScript)} $argv`;
     return [
       `function pai; ${command}; end`,
+      `function uai; ${command}; end`,
       `function k; ${command}; end`,
     ].join("\n");
   }
@@ -903,6 +904,11 @@ function paiShellCommand(profileKind: "posix" | "fish" | "powershell", dataDir: 
       `  if (-not $env:PAI_DIR -or -not (Test-Path -LiteralPath $env:PAI_DIR)) { $env:PAI_DIR = '${escapedPaiDir}' }`,
       `  if (-not $env:PAI_FRAMEWORK) { $env:PAI_FRAMEWORK = '${escapedFramework}' }`,
       `  if (-not $env:PAI_CONFIG_DIR -or -not (Test-Path -LiteralPath $env:PAI_CONFIG_DIR)) { $env:PAI_CONFIG_DIR = '${escapedConfigDir}' }`,
+      "  $env:UAI_DIR = $env:PAI_DIR",
+      "  $env:UAI_DATA_DIR = $env:PAI_DATA_DIR",
+      "  $env:UAI_CONFIG_DIR = $env:PAI_CONFIG_DIR",
+      "  $env:UAI_FRAMEWORK_DIR = $env:PAI_FRAMEWORK_DIR",
+      "  $env:UAI_FRAMEWORK = $env:PAI_FRAMEWORK",
       "}",
       "Initialize-PAIEnvironment",
       "function Invoke-PAI {",
@@ -912,6 +918,9 @@ function paiShellCommand(profileKind: "posix" | "fish" | "powershell", dataDir: 
       "function pai {",
       "  Invoke-PAI @args",
       "}",
+      "function uai {",
+      "  Invoke-PAI @args",
+      "}",
       "function k {",
       "  Invoke-PAI @args",
       "}",
@@ -919,6 +928,7 @@ function paiShellCommand(profileKind: "posix" | "fish" | "powershell", dataDir: 
   }
   return [
     `alias pai='PAI_DIR=${JSON.stringify(paiDir)} PAI_FRAMEWORK_DIR=${JSON.stringify(frameworkDir)} PAI_FRAMEWORK=${JSON.stringify(framework)} PAI_DATA_DIR=${JSON.stringify(dataDir)} bun ${JSON.stringify(paiScript)}'`,
+    `alias uai='PAI_DIR=${JSON.stringify(paiDir)} PAI_FRAMEWORK_DIR=${JSON.stringify(frameworkDir)} PAI_FRAMEWORK=${JSON.stringify(framework)} PAI_DATA_DIR=${JSON.stringify(dataDir)} bun ${JSON.stringify(paiScript)}'`,
     `alias k='PAI_DIR=${JSON.stringify(paiDir)} PAI_FRAMEWORK_DIR=${JSON.stringify(frameworkDir)} PAI_FRAMEWORK=${JSON.stringify(framework)} PAI_DATA_DIR=${JSON.stringify(dataDir)} bun ${JSON.stringify(paiScript)}'`,
   ].join("\n");
 }
@@ -2278,10 +2288,12 @@ export async function runConfiguration(
       // Remove any existing pai/k alias (old CORE or PAI paths, any marker variant)
       content = content.replace(/^#\s*(?:PAI|CORE)\s*alias(?:es)?.*\n(?:.*\n)*?(?=\n#|\n?$)/gm, "");
       content = content.replace(/^alias pai=.*\n?/gm, "");
+      content = content.replace(/^alias uai=.*\n?/gm, "");
       content = content.replace(/^alias k=.*\n?/gm, "");
       content = content.replace(/^function Initialize-PAIEnvironment \{[\s\S]*?^\}/gm, "");
       content = content.replace(/^function Invoke-PAI \{[\s\S]*?^\}/gm, "");
       content = content.replace(/^function pai \{[\s\S]*?^\}/gm, "");
+      content = content.replace(/^function uai \{[\s\S]*?^\}/gm, "");
       content = content.replace(/^function k \{[\s\S]*?^\}/gm, "");
       // Add fresh alias
       content = content.trimEnd() + `\n\n${marker}\n${aliasLine}\n`;

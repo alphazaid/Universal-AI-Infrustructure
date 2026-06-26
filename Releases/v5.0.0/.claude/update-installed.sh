@@ -683,9 +683,18 @@ PY
   if [ -z "\${PAI_DIR:-}" ] || [ ! -d "\$PAI_DIR" ]; then export PAI_DIR="$pai_dir"; fi
   if [ -z "\${PAI_FRAMEWORK:-}" ]; then export PAI_FRAMEWORK="$framework"; fi
   if [ -z "\${PAI_CONFIG_DIR:-}" ] || [ ! -d "\$PAI_CONFIG_DIR" ]; then export PAI_CONFIG_DIR="$config_dir"; fi
+  export UAI_DIR="\$PAI_DIR"
+  export UAI_DATA_DIR="\$PAI_DATA_DIR"
+  export UAI_CONFIG_DIR="\$PAI_CONFIG_DIR"
+  export UAI_FRAMEWORK_DIR="\$PAI_FRAMEWORK_DIR"
+  export UAI_FRAMEWORK="\$PAI_FRAMEWORK"
 }
 initialize_pai_environment
 pai() {
+  initialize_pai_environment
+  bun "$pai_script" "\$@"
+}
+uai() {
   initialize_pai_environment
   bun "$pai_script" "\$@"
 }

@@ -10,6 +10,15 @@ import { homedir } from "os";
 import { join } from "path";
 import type { FrameworkId, FrameworkTarget } from "./types";
 
+// ── UAI brand env aliases (scoped rename Phase 1) ──────────────────────────
+// UAI_* environment variables take precedence over their PAI_* equivalents so
+// the installer honors the UAI names. No data is moved; a no-op when unset.
+// See PAI/DOCUMENTATION/UaiScopedRenamePlan.md.
+for (const key of ["DIR", "DATA_DIR", "CONFIG_DIR", "FRAMEWORK_DIR", "FRAMEWORK"] as const) {
+  const uaiVal = process.env[`UAI_${key}`];
+  if (uaiVal !== undefined && uaiVal !== "") process.env[`PAI_${key}`] = uaiVal;
+}
+
 export const FRAMEWORK_IDS: readonly FrameworkId[] = ["claude", "codex", "opencode"] as const;
 
 const FRAMEWORK_LABELS: Record<FrameworkId, string> = {

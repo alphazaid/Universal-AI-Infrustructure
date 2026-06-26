@@ -9,6 +9,20 @@ type FrameworkState = {
   dataDir?: string;
 };
 
+// ── UAI brand env aliases (scoped rename Phase 1) ──────────────────────────
+// UAI_* environment variables take precedence over their PAI_* equivalents.
+// Mapping them onto PAI_* at module load lets every PAI_*-reading resolver in
+// this file honor the UAI names with zero duplicated logic. No data is moved;
+// a no-op when no UAI_* var is set. See PAI/DOCUMENTATION/UaiScopedRenamePlan.md.
+const UAI_ENV_KEYS = ["DIR", "DATA_DIR", "CONFIG_DIR", "FRAMEWORK_DIR", "FRAMEWORK", "ENV_PATH", "MEMORY_DIR", "USER_DIR"] as const;
+export function applyUaiEnvAliases(): void {
+  for (const key of UAI_ENV_KEYS) {
+    const uaiVal = process.env[`UAI_${key}`];
+    if (uaiVal !== undefined && uaiVal !== "") process.env[`PAI_${key}`] = uaiVal;
+  }
+}
+applyUaiEnvAliases();
+
 export function homeDir(): string {
   const home = process.env.HOME;
   if (home && existsSync(home)) return home;

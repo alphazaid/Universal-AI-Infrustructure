@@ -96,3 +96,13 @@ The scoped change touches ~15–25 enumerated files — the same subsystems the 
 - **D2:** Hard-move `~/.pai` → `~/.uai`, or symlink-only (leave data at `~/.pai`, add `~/.uai` → `~/.pai`)? Symlink-only is lower risk.
 - **D3:** Rename the launchd/systemd label now, or defer it (cosmetic, highest breakage)?
 - **D4:** Re-brand the Pulse dashboard/voice in Phase 3, or keep the `PAI` engine voice?
+
+## 12. Implementation status (live)
+
+- **Phase 1 — IN PROGRESS.** The `uai` command and dual `UAI_*` env (UAI takes precedence over `PAI_*`) landed in:
+  - `PAI/TOOLS/lib/paths.ts` — runtime resolver honors `UAI_*` (verified: `UAI_DATA_DIR` flows to `getPaiDataDir()`).
+  - `PAI/PAI-Install/engine/frameworks.ts` — installer resolver honors `UAI_*`.
+  - `PAI/PAI-Install/engine/actions.ts` — fresh-install profile generator emits `uai` + `UAI_*` for posix, fish, and PowerShell, with matching cleanup regexes.
+  - `update-installed.sh` — non-Windows hotfix-update profile repair emits `uai` + `UAI_*`.
+- **Known gap:** `update-installed.ps1` (`Get-PaiPowerShellBlock`) — the Windows hotfix-update profile-repair path — is NOT yet patched. The file was locked by host security (Defender/sandbox) and could not be written from this environment. Fresh Windows installs are unaffected (they use `actions.ts`). To close the gap, apply the same two changes when the file is writable: the `UAI_*` mirror at the end of `Initialize-PAIEnvironment`, and `function uai { Invoke-PAI @args }` placed before `function k`.
+- **Phases 2–3** (state dir move, service-label relabel, brand strings) remain gated on decisions D1–D4.
