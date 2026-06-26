@@ -1,3 +1,9 @@
+> ## 🍴 Universal AI Infrastructure (UAI)
+>
+> **UAI is a community fork of [Personal AI Infrastructure (PAI)](https://github.com/danielmiessler/Personal_AI_Infrastructure), created by [Daniel Miessler](https://danielmiessler.com).** The architecture, the Algorithm, Pulse, the skill and memory systems, and the overwhelming majority of the code are Daniel's work — all foundational credit belongs to him and the PAI community. This fork extends PAI toward cross-CLI feature parity (Claude Code + Codex).
+>
+> UAI is **not affiliated with, sponsored by, or endorsed by** Daniel Miessler. Licensed under MIT (Daniel's original copyright preserved — see [LICENSE](LICENSE)). Upstream: https://github.com/danielmiessler/Personal_AI_Infrastructure
+
 <div align="center">
 
 <picture>
@@ -9,11 +15,15 @@
 <br/>
 <br/>
 
-# Personal AI Infrastructure
+# Universal AI Infrastructure (UAI)
+
+**A fork of [Personal AI Infrastructure (PAI)](https://github.com/danielmiessler/Personal_AI_Infrastructure) by [Daniel Miessler](https://danielmiessler.com)**
 
 [![Typing SVG](https://readme-typing-svg.demolab.com?font=Fira+Code&weight=500&size=24&pause=1000&color=60A5FA&center=true&vCenter=true&width=600&lines=Everyone+needs+access+to+the+best+AI.;AI+should+magnify+everyone.;Your+Life+Operating+System.)](https://github.com/danielmiessler/Personal_AI_Infrastructure)
 
 <br/>
+
+<sub>📊 The GitHub stat badges below reflect the <a href="https://github.com/danielmiessler/Personal_AI_Infrastructure">upstream PAI project</a> this fork is built on — not the UAI fork itself.</sub>
 
 <!-- Social Proof -->
 ![Stars](https://img.shields.io/github/stars/danielmiessler/Personal_AI_Infrastructure?style=social)
@@ -62,6 +72,19 @@
 ---
 
 </div>
+
+## 🍴 About This Fork
+
+**Universal AI Infrastructure (UAI)** is a community fork of **[Personal AI Infrastructure (PAI)](https://github.com/danielmiessler/Personal_AI_Infrastructure)**, originally created by **[Daniel Miessler](https://danielmiessler.com)**.
+
+- **Original author & credit:** PAI — its architecture, the Algorithm, Pulse, the skill/memory systems, and nearly all of the code — is the work of Daniel Miessler and the PAI community. All credit for the foundation belongs to them.
+- **Why this fork exists:** UAI focuses on bringing the full PAI ecosystem to feature parity across multiple agent CLIs (Claude Code and Codex), so the same Life OS works behind either.
+- **License:** MIT, unchanged. Daniel's original copyright notice is preserved in [LICENSE](LICENSE), exactly as MIT requires.
+- **Not official:** UAI is an independent fork and is **not affiliated with, sponsored by, or endorsed by** Daniel Miessler. For the canonical project, see the [upstream repository](https://github.com/danielmiessler/Personal_AI_Infrastructure).
+
+Most documentation below is inherited from upstream PAI and describes the PAI system this fork is built on. Internal identifiers, paths (`~/.claude/PAI`, `$PAI_DIR`), and install scripts intentionally keep the `PAI` name for compatibility.
+
+---
 
 > [!IMPORTANT]
 > **PAI v5.0.0 — Life Operating System** — the biggest release in PAI history. PAI is no longer "AI scaffolding" — it's a **Life Operating System** with the unified **Pulse** daemon (Life Dashboard at `localhost:31337`), a **DA** (Digital Assistant) identity layer, **Algorithm v6.3.0** (Current State → Ideal State, seven phases, classifier-driven mode + tier), the **ISA** primitive (universal "ideal state" articulation), 45 skills, 171 workflows, 37 hooks, and structural privacy via containment zones.
@@ -426,6 +449,9 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ## 🙏 Credits
 
+
+**[Daniel Miessler](https://danielmiessler.com)** — Creator of Personal AI Infrastructure (PAI), the project this fork (UAI) is built on. The foundation, architecture, and the vast majority of the code are his work.
+
 **Anthropic and the Claude Code team** — First and foremost. You are moving AI further and faster than anyone right now. Claude Code is the foundation that makes all of this possible.
 
 **[IndyDevDan](https://www.youtube.com/@indydevdan)** — For great videos on meta-prompting and custom agents that have inspired parts of PAI.
@@ -549,6 +575,8 @@ MIT License - see [LICENSE](LICENSE) for details.
 <div align="center">
 
 **Built with ❤️ by [Daniel Miessler](https://danielmiessler.com) and the PAI community**
+
+*Universal AI Infrastructure (UAI) is a fork maintained by [jSydorowicz21](https://github.com/jSydorowicz21) — all foundational credit to Daniel Miessler.*
 
 *Augment yourself.*
 
