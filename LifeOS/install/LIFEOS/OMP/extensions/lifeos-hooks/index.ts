@@ -1,0 +1,472 @@
+/**
+ * lifeos-hooks — CC-hook-protocol adapter for OMP.
+ *
+ * Runs the REAL LifeOS Claude Code hooks (bun scripts at ~/.claude/hooks/*.hook.ts)
+ * against mapped OMP extension events, so the actual PAI logic executes here rather
+ * than being re-implemented (and drifting). Each hook is invoked as a subprocess with
+ * the Claude Code stdin/stdout contract:
+ *   stdin : { hook_event_name, tool_name, tool_input, tool_response, prompt, cwd, ... }
+ *   stdout: {hookSpecificOutput:{additionalContext}} | {decision:"block",reason}
+ *           | {hookSpecificOutput:{decision:{behavior:"allow"|"deny"}}} | plain text
+ *
+ * CC->OMP event map:
+ *   SessionStart->session_start  UserPromptSubmit->before_agent_start
+ *   PreToolUse->tool_call        PostToolUse->tool_result
+ *   Stop->session_stop           SessionEnd->session_shutdown
+ *
+ * EXECUTION IS FULLY ASYNC (2026-07-12). Extensions share OMP's process AND event loop
+ * with the TUI; the original spawnSync core froze the terminal for the whole hook window
+ * (no paint, no input echo — the "stall on Enter" bug). Hooks now run via awaited async
+ * spawn: identical results and ordering, but the loop stays free so the UI paints (the
+ * working-message indicator is visible, message echo is instant). OMP awaits async
+ * handler return values on both the blocking (tool_call) and injecting
+ * (before_agent_start) paths — probe-verified 2026-07-12.
+ *
+ * Fidelity guards (why this is an adapter, not a symlink):
+ *   - CLAUDE_* env shim: PAI hooks read CLAUDE_PROJECT_DIR / CLAUDE_PLUGIN_ROOT /
+ *     CLAUDE_EFFORT which are unset under OMP; synthesized per invocation.
+ *   - OMP->CC tool-name normalization: OMP `bash`/`write`/`edit` -> CC `Bash`/`Write`/`Edit`.
+ *   - once-guard: SessionStart-style hooks (LoadContext) fire once per session.
+ *   - subagent guard: skip per-turn injection when running as a task subagent.
+ *   - CC `async: true` parity: flagged hooks spawn detached fire-and-forget.
+ *   - Pulse gate: hooks that need localhost:31337 are gate:"pulse", skipped when down.
+ *   - Stop contract: ONLY an explicit decision:block affects the turn; Stop-hook stdout
+ *     is informational (returning it as context looped turns — fixed 2026-07-11).
+ *   - Fail-open: any error -> that hook contributes nothing.
+ *
+ * MANIFEST curated from the hook-inventory classification (see PARITY.md). Mode system
+ * (TheRouter + OutputFormatGate) toggled by `manage.ts modes on|off`.
+ */
+
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { spawn } from "node:child_process";
+
+type OmpEvent =
+	| "session_start"
+	| "before_agent_start"
+	| "tool_call"
+	| "tool_result"
+	| "session_stop"
+	| "session_shutdown";
+
+interface HookSpec {
+	file?: string;
+	url?: string;
+	ompEvent: OmpEvent;
+	ccEvent: string;
+	toggle?: string;
+	matcher?: RegExp;
+	timeoutMs?: number;
+	gate?: "pulse";
+	once?: boolean;
+	/** CC settings.json `async: true` parity — fire-and-forget, output ignored, never blocks the turn. */
+	fireAndForget?: boolean;
+}
+
+interface HookOutcome {
+	additionalContext?: string;
+	block?: boolean;
+	reason?: string;
+}
+
+interface ExtensionCtx {
+	hasUI?: boolean;
+	cwd?: string;
+	sessionManager?: { getBranch?: () => unknown[]; getSessionFile?: () => string | undefined };
+	ui?: { notify?: (message: string, level?: string) => void; setWorkingMessage?: (message?: string) => void };
+}
+
+interface ExtensionApi {
+	on: (event: string, handler: (event: unknown, ctx: ExtensionCtx) => unknown) => void;
+	setLabel?: (label: string) => void;
+}
+
+const HOME = homedir();
+const CLAUDE_ROOT = join(HOME, ".claude");
+const HOOKS_DIR = join(CLAUDE_ROOT, "hooks");
+const LIFEOS_DIR = process.env.LIFEOS_DIR ?? join(CLAUDE_ROOT, "LIFEOS");
+const BUN = existsSync(join(HOME, ".bun/bin/bun")) ? join(HOME, ".bun/bin/bun") : "bun";
+// Mode-system toggle: managed by `bun LIFEOS/OMP/manage.ts modes on|off` (marker file +
+// constitution symlink swap). Env var LIFEOS_MODES=1 also works for a single run.
+const AGENT_DIR = process.env.PI_CODING_AGENT_DIR ?? join(HOME, ".omp", "agent");
+const MODES_MARKER = join(AGENT_DIR, "lifeos-modes.on");
+// Snapshot ONCE at extension load (= session start). The constitution variant is also
+// fixed at session start, so reading the marker per-prompt would desync them mid-session:
+// `/modes on` would add router latency immediately while the loaded constitution still
+// suppresses banners. Session-scoping both keeps the atomic-swap invariant and makes
+// "/modes … takes effect next session" literally true.
+const MODES_ON = existsSync(MODES_MARKER) || Boolean(process.env.LIFEOS_MODES);
+
+const TOOL_NAME_MAP: Record<string, string> = {
+	bash: "Bash",
+	write: "Write",
+	edit: "Edit",
+	multiedit: "MultiEdit",
+	read: "Read",
+	web_search: "WebSearch",
+	web_fetch: "WebFetch",
+};
+
+// Curated from the hook-inventory classification (PARITY.md). Only safe + meaningful-under-OMP hooks.
+const MANIFEST: HookSpec[] = [
+	// before_agent_start (CC UserPromptSubmit / SessionStart-once)
+	{ file: "LoadContext.hook.ts", ompEvent: "before_agent_start", ccEvent: "SessionStart", once: true, timeoutMs: 8000 },
+	{ file: "MemoryDeltaSurface.hook.ts", ompEvent: "before_agent_start", ccEvent: "UserPromptSubmit", timeoutMs: 8000 },
+	{ file: "MemoryReviewTrigger.hook.ts", ompEvent: "before_agent_start", ccEvent: "UserPromptSubmit", fireAndForget: true, timeoutMs: 5000 },
+	{ file: "SatisfactionCapture.hook.ts", ompEvent: "before_agent_start", ccEvent: "UserPromptSubmit", fireAndForget: true, timeoutMs: 20000 },
+	{ file: "ReminderRouter.hook.ts", ompEvent: "before_agent_start", ccEvent: "UserPromptSubmit", fireAndForget: true, timeoutMs: 5000 },
+	// tool_result (CC PostToolUse) — write/edit only; each self-gates on file path
+	{ file: "ISASync.hook.ts", ompEvent: "tool_result", ccEvent: "PostToolUse", matcher: /^(write|edit|multiedit)$/i, timeoutMs: 8000 },
+	{ file: "TelosSummarySync.hook.ts", ompEvent: "tool_result", ccEvent: "PostToolUse", matcher: /^(write|edit|multiedit)$/i, fireAndForget: true, timeoutMs: 8000 },
+	{ file: "CheckpointPerISC.hook.ts", ompEvent: "tool_result", ccEvent: "PostToolUse", matcher: /^(write|edit|multiedit)$/i, timeoutMs: 30000 },
+	// tool_call (CC PreToolUse) — guards that block via exit code 2 + stderr
+	{ file: "SystemFileGuard.hook.ts", ompEvent: "tool_call", ccEvent: "PreToolUse", matcher: /^(write|edit|multiedit)$/i, timeoutMs: 5000 },
+	{ file: "ArtWorkflowGuard.hook.ts", ompEvent: "tool_call", ccEvent: "PreToolUse", matcher: /^bash$/i, timeoutMs: 5000 },
+	// CC parity: Pulse HTTP-route guard (settings.json type:"http" on the Agent matcher).
+	// OMP has no Skill tool (skills load via read); agent spawns go through task.
+	{ url: "http://localhost:31337/hooks/agent-guard", ompEvent: "tool_call", ccEvent: "PreToolUse", matcher: /^task$/i, gate: "pulse", timeoutMs: 4000 },
+	// session_stop (CC Stop)
+	{ file: "MemoryReviewFire.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", timeoutMs: 10000 },
+	{ file: "MemoryHealthGate.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", timeoutMs: 8000 },
+	{ file: "DocIntegrity.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", timeoutMs: 15000 },
+	{ file: "ISARenderOnStop.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", timeoutMs: 8000 },
+	{ file: "VoiceCompletion.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", gate: "pulse", timeoutMs: 6000 },
+	{ file: "SuccessClaimGate.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", timeoutMs: 8000 },
+	// session_shutdown (CC SessionEnd)
+	{ file: "UpdateCounts.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 15000 },
+	{ file: "WorkCompletionLearning.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 20000 },
+	{ file: "SessionCleanup.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 8000 },
+	{ file: "RelationshipMemory.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 15000 },
+	{ file: "IntegrityCheck.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 10000 },
+	// mode system (CC UserPromptSubmit Router + Stop banner gate) — toggled by manage.ts
+	// `modes on|off` (marker file + constitution swap); LIFEOS_MODES=1 works for one run.
+	{ file: "TheRouter.hook.ts", ompEvent: "before_agent_start", ccEvent: "UserPromptSubmit", toggle: "LIFEOS_MODES", timeoutMs: 35000 },
+	{ file: "OutputFormatGate.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", toggle: "LIFEOS_MODES", timeoutMs: 8000 },
+];
+
+const firedOnce = new Set<string>();
+
+function isLikelySubagent(): boolean {
+	return Boolean(
+		process.env.CLAUDE_CODE_SUBAGENT_NAME ||
+			process.env.CLAUDE_CODE_SUBAGENT_TYPE ||
+			process.env.CLAUDE_CODE_AGENT_TASK_ID ||
+			process.env.CLAUDE_AGENT_SDK === "1" ||
+			process.env.PI_SUBAGENT ||
+			process.env.OMP_SUBAGENT ||
+			process.env.PI_AGENT_TASK_ID,
+	);
+}
+
+let pulseUp: boolean | undefined;
+async function pulseAvailable(): Promise<boolean> {
+	if (pulseUp !== undefined) return pulseUp;
+	try {
+		const res = await fetch("http://localhost:31337/", { signal: AbortSignal.timeout(1000) });
+		pulseUp = res.status >= 200 && res.status < 400;
+	} catch {
+		pulseUp = false;
+	}
+	return pulseUp;
+}
+
+function parseHookJson(out: string): HookOutcome {
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(out);
+	} catch {
+		return {};
+	}
+	if (parsed === null || typeof parsed !== "object") return {};
+	if ("decision" in parsed && parsed.decision === "block") {
+		const reason = "reason" in parsed && typeof parsed.reason === "string" ? parsed.reason : "blocked by LifeOS hook";
+		return { block: true, reason };
+	}
+	if ("hookSpecificOutput" in parsed) {
+		const hso = parsed.hookSpecificOutput;
+		if (hso !== null && typeof hso === "object") {
+			if ("additionalContext" in hso && typeof hso.additionalContext === "string") {
+				return { additionalContext: hso.additionalContext };
+			}
+			if ("decision" in hso && hso.decision !== null && typeof hso.decision === "object") {
+				const d = hso.decision;
+				if ("behavior" in d && d.behavior === "deny") return { block: true, reason: "denied by LifeOS Safety hook" };
+			}
+		}
+	}
+	return {};
+}
+
+async function runHttpHook(spec: HookSpec, ccStdin: Record<string, unknown>): Promise<HookOutcome> {
+	try {
+		const res = await fetch(spec.url ?? "", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(ccStdin),
+			signal: AbortSignal.timeout(spec.timeoutMs ?? 4000),
+		});
+		if (!res.ok) return {};
+		const out = (await res.text()).trim();
+		if (out.length === 0) return {};
+		return out.startsWith("{") ? parseHookJson(out) : { additionalContext: out };
+	} catch {
+		return {};
+	}
+}
+
+function hookEnv(ctx: ExtensionCtx): Record<string, string | undefined> {
+	return {
+		...process.env,
+		LIFEOS_DIR,
+		CLAUDE_PROJECT_DIR: ctx.cwd ?? process.cwd(),
+		CLAUDE_PLUGIN_ROOT: CLAUDE_ROOT,
+		CLAUDE_EFFORT: process.env.CLAUDE_EFFORT ?? "E3",
+	};
+}
+
+interface SpawnResult {
+	status: number | null;
+	stdout: string;
+	stderr: string;
+}
+
+/**
+ * Async subprocess runner — spawnSync replacement. spawnSync blocked OMP's shared
+ * event loop for the full hook duration (TUI freeze); this awaits instead, with a
+ * hard timeout that SIGKILLs the child.
+ */
+function spawnHook(path: string, input: string, timeoutMs: number, env: Record<string, string | undefined>): Promise<SpawnResult> {
+	const { promise, resolve } = Promise.withResolvers<SpawnResult>();
+	let stdout = "";
+	let stderr = "";
+	let settled = false;
+	try {
+		const child = spawn(BUN, [path], { env, stdio: ["pipe", "pipe", "pipe"] });
+		const timer = setTimeout(() => {
+			if (!settled) {
+				settled = true;
+				try {
+					child.kill("SIGKILL");
+				} catch {
+					/* already dead */
+				}
+				resolve({ status: null, stdout, stderr });
+			}
+		}, timeoutMs);
+		child.stdout?.on("data", (chunk: Buffer) => {
+			stdout += chunk.toString();
+		});
+		child.stderr?.on("data", (chunk: Buffer) => {
+			stderr += chunk.toString();
+		});
+		child.on("close", (code) => {
+			if (!settled) {
+				settled = true;
+				clearTimeout(timer);
+				resolve({ status: code, stdout, stderr });
+			}
+		});
+		child.on("error", () => {
+			if (!settled) {
+				settled = true;
+				clearTimeout(timer);
+				resolve({ status: null, stdout, stderr });
+			}
+		});
+		child.stdin?.write(input);
+		child.stdin?.end();
+	} catch {
+		if (!settled) {
+			settled = true;
+			resolve({ status: null, stdout, stderr });
+		}
+	}
+	return promise;
+}
+
+async function runHook(spec: HookSpec, ccStdin: Record<string, unknown>, ctx: ExtensionCtx): Promise<HookOutcome> {
+	if (spec.gate === "pulse" && !(await pulseAvailable())) return {};
+	if (spec.url) return runHttpHook(spec, ccStdin);
+	if (!spec.file) return {};
+	const path = join(HOOKS_DIR, spec.file);
+	if (!existsSync(path)) return {};
+	if (spec.toggle && !MODES_ON) return {};
+
+	// CC `async: true` parity: detached fire-and-forget. Output ignored by contract —
+	// these hooks write state files / observability, never additionalContext the model needs.
+	if (spec.fireAndForget) {
+		try {
+			const child = spawn(BUN, [path], { env: hookEnv(ctx), stdio: ["pipe", "ignore", "ignore"], detached: true });
+			child.stdin?.write(JSON.stringify(ccStdin));
+			child.stdin?.end();
+			child.unref();
+		} catch {
+			/* fail-open */
+		}
+		return {};
+	}
+
+	const res = await spawnHook(path, JSON.stringify(ccStdin), spec.timeoutMs ?? 5000, hookEnv(ctx));
+	if (res.status === 2) return { block: true, reason: res.stderr.trim() || "blocked by LifeOS guard" };
+	const out = res.stdout.trim();
+	if (out.length === 0) return {};
+	return out.startsWith("{") ? parseHookJson(out) : { additionalContext: out };
+}
+
+function buildStdin(spec: HookSpec, extra: Record<string, unknown>, ctx: ExtensionCtx): Record<string, unknown> {
+	return { hook_event_name: spec.ccEvent, session_id: "omp", cwd: ctx.cwd ?? process.cwd(), ...extra };
+}
+
+function readField(value: unknown, key: string): unknown {
+	if (value !== null && typeof value === "object" && key in value) {
+		const record: Record<string, unknown> = value;
+		return record[key];
+	}
+	return undefined;
+}
+
+function readToolName(event: unknown): string {
+	const name = readField(event, "toolName") ?? readField(event, "tool_name");
+	return typeof name === "string" ? name : "";
+}
+
+function contentToText(event: unknown): string {
+	const content = readField(event, "content");
+	if (!Array.isArray(content)) return "";
+	return content
+		.map((chunk) => {
+			const text = readField(chunk, "text");
+			return typeof text === "string" ? text : "";
+		})
+		.filter((text) => text.length > 0)
+		.join("\n");
+}
+
+function latestUserText(ctx: ExtensionCtx): string {
+	const branch = ctx.sessionManager?.getBranch?.();
+	if (!Array.isArray(branch)) return "";
+	for (let i = branch.length - 1; i >= 0; i--) {
+		if (readField(branch[i], "role") === "user") {
+			const text = contentToText(branch[i]).trim();
+			if (text.length > 0) return text;
+		}
+	}
+	return "";
+}
+
+function latestAssistantText(ctx: ExtensionCtx): string {
+	const branch = ctx.sessionManager?.getBranch?.();
+	if (!Array.isArray(branch)) return "";
+	for (let i = branch.length - 1; i >= 0; i--) {
+		if (readField(branch[i], "role") === "assistant") {
+			const text = contentToText(branch[i]).trim();
+			if (text.length > 0) return text;
+		}
+	}
+	return "";
+}
+
+// Transcript surface for Stop / SessionEnd hooks (SuccessClaimGate, VoiceCompletion,
+// RelationshipMemory). transcript_path lets them parse via the (OMP-aware)
+// TranscriptParser; last_assistant_message is the robust fallback.
+function stopExtra(ctx: ExtensionCtx): Record<string, unknown> {
+	const extra: Record<string, unknown> = {};
+	const file = ctx.sessionManager?.getSessionFile?.();
+	if (typeof file === "string" && file.length > 0) extra.transcript_path = file;
+	const last = latestAssistantText(ctx);
+	if (last.length > 0) extra.last_assistant_message = last;
+	return extra;
+}
+
+export default function lifeosHooks(pi: ExtensionApi): void {
+	pi.setLabel?.("LifeOS Hooks");
+
+	pi.on("before_agent_start", async (event, ctx) => {
+		if (isLikelySubagent()) return undefined;
+		// event.prompt is authoritative — at before_agent_start the user message is NOT yet
+		// on the session branch (probe: last branch entry is thinking_level_change).
+		const eventPrompt = readField(event, "prompt");
+		const prompt = typeof eventPrompt === "string" && eventPrompt.length > 0 ? eventPrompt : latestUserText(ctx);
+		// Surface the pre-turn hook window (CC masks the same span with its spinner). With the
+		// async core the TUI actually paints this now: TheRouter's classify (~4s) when modes
+		// are on, otherwise the fast context pass (~150ms, barely a flicker).
+		const modesOn = MODES_ON;
+		if (ctx.hasUI) ctx.ui?.setWorkingMessage?.(modesOn ? "LifeOS: classifying mode/effort…" : "LifeOS: loading context…");
+		try {
+			const chunks: string[] = [];
+			for (const spec of MANIFEST.filter((s) => s.ompEvent === "before_agent_start")) {
+				if (spec.once && spec.file && firedOnce.has(spec.file)) continue;
+				const outcome = await runHook(spec, buildStdin(spec, { prompt }, ctx), ctx);
+				if (spec.once && spec.file) firedOnce.add(spec.file);
+				if (outcome.additionalContext) chunks.push(outcome.additionalContext);
+			}
+			if (chunks.length === 0) return undefined;
+			return { message: { customType: "lifeos-hooks", content: [{ type: "text", text: chunks.join("\n\n") }], display: false } };
+		} finally {
+			if (ctx.hasUI) ctx.ui?.setWorkingMessage?.();
+		}
+	});
+
+	// OMP tool args use `path`; CC hooks read `tool_input.file_path` (SystemFileGuard,
+	// ISASync, CheckpointPerISC all path-gate on it — missing field = silent allow/no-op,
+	// which let a SYSTEM-file write through on 2026-07-12). Normalize before bridging.
+	function toCcToolInput(input: unknown): Record<string, unknown> {
+		const base = input !== null && typeof input === "object" ? { ...(input as Record<string, unknown>) } : {};
+		if (typeof base.path === "string" && base.file_path === undefined) base.file_path = base.path;
+		return base;
+	}
+
+	pi.on("tool_call", async (event, ctx) => {
+		const toolName = readToolName(event);
+		if (toolName.length === 0) return undefined;
+		const input = readField(event, "input") ?? readField(event, "tool_input");
+		const toolInput = toCcToolInput(input);
+		const ccName = TOOL_NAME_MAP[toolName.toLowerCase()] ?? toolName;
+		for (const spec of MANIFEST.filter((s) => s.ompEvent === "tool_call" && (!s.matcher || s.matcher.test(toolName)))) {
+			const outcome = await runHook(spec, buildStdin(spec, { tool_name: ccName, tool_input: toolInput }, ctx), ctx);
+			if (outcome.block) return { block: true, reason: outcome.reason ?? "blocked by LifeOS hook" };
+		}
+		return undefined;
+	});
+
+	pi.on("tool_result", async (event, ctx) => {
+		const toolName = readToolName(event);
+		if (toolName.length === 0) return undefined;
+		const specs = MANIFEST.filter((s) => s.ompEvent === "tool_result" && (!s.matcher || s.matcher.test(toolName)));
+		if (specs.length === 0) return undefined;
+		const ccName = TOOL_NAME_MAP[toolName.toLowerCase()] ?? toolName;
+		// CC PostToolUse stdin carries the ORIGINAL tool_input alongside tool_response;
+		// ISASync/TelosSummarySync/CheckpointPerISC path-gate on tool_input.file_path.
+		// Omitting it made them silent no-ops (2026-07-12 finding).
+		const toolInput = toCcToolInput(readField(event, "input") ?? readField(event, "tool_input"));
+		const body = contentToText(event);
+		const chunks: string[] = [];
+		for (const spec of specs) {
+			const outcome = await runHook(spec, buildStdin(spec, { tool_name: ccName, tool_input: toolInput, tool_response: body }, ctx), ctx);
+			if (outcome.additionalContext) chunks.push(outcome.additionalContext);
+		}
+		if (chunks.length === 0) return undefined;
+		return { content: [{ type: "text", text: chunks.join("\n\n") }] };
+	});
+
+	pi.on("session_stop", async (_event, ctx) => {
+		// Contract: ONLY an explicit hook decision:block continues the turn. Plain stdout from
+		// Stop hooks (render status, {"continue":true} acks, doc reports) is informational — in
+		// CC it never re-prompts, and returning it as additionalContext here made OMP loop the
+		// turn until the continuation cap and drop the visible response (found 2026-07-11:
+		// ISARenderOnStop's {"continue":true} ack triggered exactly that).
+		for (const spec of MANIFEST.filter((s) => s.ompEvent === "session_stop")) {
+			const outcome = await runHook(spec, buildStdin(spec, stopExtra(ctx), ctx), ctx);
+			if (outcome.block) return { decision: "block", reason: outcome.reason ?? "held by LifeOS gate" };
+		}
+		return undefined;
+	});
+
+	pi.on("session_shutdown", async (_event, ctx) => {
+		for (const spec of MANIFEST.filter((s) => s.ompEvent === "session_shutdown")) {
+			await runHook(spec, buildStdin(spec, stopExtra(ctx), ctx), ctx);
+		}
+	});
+}

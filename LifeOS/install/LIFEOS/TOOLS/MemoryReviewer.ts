@@ -57,6 +57,7 @@ import {
 
 const CLAUDE_ROOT = pathResolve(homedir(), ".claude");
 const HARNESS_PROJECTS_DIR = pathResolve(homedir(), ".claude", "projects");
+const OMP_SESSIONS_DIR = pathResolve(homedir(), ".omp", "agent", "sessions");
 const RUNS_LOG_PATH = pathResolve(CLAUDE_ROOT, "LIFEOS/MEMORY/OBSERVABILITY/reviewer-runs.jsonl");
 const RUNS_DEBUG_DIR = pathResolve(CLAUDE_ROOT, "LIFEOS/MEMORY/OBSERVABILITY/reviewer-runs");
 const REVIEW_CONFIG_PATH = pathResolve(CLAUDE_ROOT, "LIFEOS/USER/CONFIG/memory-review.json");
@@ -92,37 +93,40 @@ interface Exchange {
 }
 
 /**
- * Find the most recently-modified .jsonl in any harness project subdir.
- * Returns null if no transcripts exist.
+ * Find the most recently-modified session .jsonl across BOTH the Claude Code
+ * harness project store (~/.claude/projects) and the OMP session store
+ * (~/.omp/agent/sessions), so the reviewer works under either harness. Both use
+ * the same 2-level <root>/<sessionDir>/*.jsonl layout and the same
+ * message:{role,content} line shape. Returns null if no transcripts exist.
  */
-function findMostRecentTranscript(): string | null {
-  if (!existsSync(HARNESS_PROJECTS_DIR)) return null;
-
-  let newest: { path: string; mtime: number } | null = null;
-  try {
-    const projects = readdirSync(HARNESS_PROJECTS_DIR);
-    for (const project of projects) {
-      const projectDir = pathJoin(HARNESS_PROJECTS_DIR, project);
-      let stat: ReturnType<typeof statSync> | null = null;
-      try { stat = statSync(projectDir); } catch { continue; }
-      if (!stat) continue;
-      if (!stat.isDirectory()) continue;
-
-      const files = readdirSync(projectDir);
-      for (const file of files) {
-        if (!file.endsWith(".jsonl")) continue;
-        const full = pathJoin(projectDir, file);
-        try {
-          const s = statSync(full);
-          if (!newest || s.mtimeMs > newest.mtime) {
-            newest = { path: full, mtime: s.mtimeMs };
-          }
-        } catch { /* skip */ }
-      }
+function collectSessionJsonl(root: string, out: Array<{ path: string; mtime: number }>): void {
+  if (!existsSync(root)) return;
+  let sessionDirs: string[];
+  try { sessionDirs = readdirSync(root); } catch { return; }
+  for (const sub of sessionDirs) {
+    const dir = pathJoin(root, sub);
+    let files: string[];
+    try {
+      if (!statSync(dir).isDirectory()) continue;
+      files = readdirSync(dir);
+    } catch { continue; }
+    for (const file of files) {
+      if (!file.endsWith(".jsonl")) continue;
+      const full = pathJoin(dir, file);
+      try {
+        out.push({ path: full, mtime: statSync(full).mtimeMs });
+      } catch { /* skip unreadable */ }
     }
-  } catch { return null; }
+  }
+}
 
-  return newest?.path ?? null;
+function findMostRecentTranscript(): string | null {
+  const candidates: Array<{ path: string; mtime: number }> = [];
+  collectSessionJsonl(HARNESS_PROJECTS_DIR, candidates);
+  collectSessionJsonl(OMP_SESSIONS_DIR, candidates);
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.mtime - a.mtime);
+  return candidates[0]?.path ?? null;
 }
 
 /**

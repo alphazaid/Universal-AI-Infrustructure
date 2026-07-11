@@ -35,13 +35,16 @@
  *   high:     opus-tier,   timeout=90s,  effort=high
  *   max:      fable-tier,  timeout=120s, effort=high   (ceiling — was xhigh, flattened 2026-07-06)
  *
- * BILLING: Uses Claude CLI with subscription (not API key)
+ * BILLING: Backend 'claude' (default) uses Claude CLI with subscription (not API key).
+ *   Backend 'omp' spawns a bare `omp` session — provider-agnostic, runs on whatever
+ *   auth omp holds (e.g. ChatGPT login → codex). Select via LIFEOS_INFERENCE_BACKEND
+ *   env var, USER/CONFIG/inference-backend file, or --backend CLI flag.
  * CACHE: Uses --exclude-dynamic-system-prompt-sections for cross-invocation prompt cache hits
  *
  */
 
 import { spawn } from "child_process";
-import { appendFileSync, existsSync, mkdirSync } from "fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
@@ -70,6 +73,56 @@ export function normalizeLevel(level: string | undefined): InferenceLevel {
   if (!level) return 'medium';
   if ((VALID_LEVELS as readonly string[]).includes(level)) return level as InferenceLevel;
   throw new Error(`[Inference] unknown level '${level}' — use low | medium | high | max (legacy fast/standard/smart names were removed 2026-06-10)`);
+}
+
+// ── Inference backend selection ─────────────────────────────────────────────
+// 'claude' (default): spawn the `claude` CLI — subscription-billed Anthropic.
+// 'omp':              spawn a bare `omp` session — runs on OMP's own default
+//                     model/auth (any provider). Added 2026-07-15 so the
+//                     intelligence layer (TheRouter, MemoryReviewer,
+//                     SatisfactionCapture, advisor) survives a
+//                     Claude-subscription cancellation.
+// 'auto':             claude first; on ANY claude failure (CLI gone, auth dead,
+//                     API error) retry once on omp. The zero-config cutover:
+//                     cancel Claude and nothing breaks, point OMP at a new
+//                     default model and LifeOS follows.
+// Precedence: LIFEOS_INFERENCE_BACKEND env → USER/CONFIG/inference-backend file → 'claude'.
+
+export type InferenceBackend = 'claude' | 'omp' | 'auto';
+
+const BACKEND_CONFIG_PATH = join(homedir(), '.claude', 'LIFEOS', 'USER', 'CONFIG', 'inference-backend');
+const VALID_BACKENDS: readonly InferenceBackend[] = ['claude', 'omp', 'auto'] as const;
+
+export function resolveBackend(): InferenceBackend {
+  const env = process.env.LIFEOS_INFERENCE_BACKEND?.trim().toLowerCase();
+  if ((VALID_BACKENDS as readonly string[]).includes(env ?? '')) return env as InferenceBackend;
+  if (env) console.error(`[Inference] ignoring invalid LIFEOS_INFERENCE_BACKEND='${env}' (use claude|omp|auto)`);
+  try {
+    if (existsSync(BACKEND_CONFIG_PATH)) {
+      const v = readFileSync(BACKEND_CONFIG_PATH, 'utf8').trim().toLowerCase();
+      if ((VALID_BACKENDS as readonly string[]).includes(v)) return v as InferenceBackend;
+      console.error(`[Inference] ignoring invalid backend config '${v}' in ${BACKEND_CONFIG_PATH} (use claude|omp|auto)`);
+    }
+  } catch { /* unreadable config → default 'claude' */ }
+  return 'claude';
+}
+
+/** Extract-and-parse a JSON object/array from model output (markdown-tolerant).
+ * Shared by both backends' expectJson handling. */
+function parseExpectedJson(output: string, latencyMs: number, level: InferenceLevel): InferenceResult {
+  // Try both object and array matches — use whichever parses successfully.
+  // The greedy object regex can capture invalid substrings when the LLM wraps
+  // a JSON array inside markdown/explanatory text containing braces; trying
+  // both candidates and validating with JSON.parse handles both reliably.
+  const objectMatch = output.match(/\{[\s\S]*\}/);
+  const arrayMatch = output.match(/\[[\s\S]*\]/);
+  for (const candidate of [objectMatch?.[0], arrayMatch?.[0]]) {
+    if (!candidate) continue;
+    try {
+      return { success: true, output, parsed: JSON.parse(candidate), latencyMs, level };
+    } catch { /* try next candidate */ }
+  }
+  return { success: false, output, error: 'Failed to parse JSON response', latencyMs, level };
 }
 
 export interface InferenceOptions {
@@ -184,6 +237,82 @@ function logModelVerification(entry: Record<string, unknown>): void {
 }
 
 /**
+ * OMP backend attempt — spawns a bare `omp` session: --no-session (no transcript
+ * for MemoryReviewer to re-ingest), --no-tools, --no-extensions (no LifeOS stack
+ * recursion). `--append-system-prompt " "` overrides the discovered
+ * ~/.omp/agent/APPEND_SYSTEM.md (the LifeOS constitution) so structured outputs
+ * stay clean — without it the constitution's format contract leaks into replies
+ * (verified 2026-07-15). Prompt travels via argv (omp --print does not read
+ * stdin) behind a `--` terminator so prompts starting with `-` are never
+ * parsed as flags (verified); a leading `@` is newline-padded so it can't be
+ * taken as a bare file reference. Reviewer/router prompts are ≤~12KB, far
+ * under macOS ARG_MAX (~1MB). Model: OMP's own configured default (model-
+ * agnostic — point OMP at any provider and LifeOS follows), unless
+ * LIFEOS_OMP_INFERENCE_MODEL pins one. Model rungs don't apply — one model
+ * serves all levels; reasoning still scales via --thinking (levels map 1:1 to
+ * HarnessEffort names).
+ */
+function ompInferenceAttempt(options: InferenceOptions, level: InferenceLevel, effort: HarnessEffort, timeout: number): Promise<InferenceResult> {
+  const startTime = Date.now();
+  const { promise, resolve } = Promise.withResolvers<InferenceResult>();
+  const modelOverride = process.env.LIFEOS_OMP_INFERENCE_MODEL?.trim();
+  // Images ride as @-path message references (omp resolves them as attachments).
+  let userPrompt = options.imagePaths?.length
+    ? [...options.imagePaths.map((p) => `@${p}`), options.userPrompt].join('\n')
+    : options.userPrompt;
+  // Guard: a prompt-initial `@` would read as a file reference, not text.
+  if (userPrompt.startsWith('@') && !options.imagePaths?.length) userPrompt = `\n${userPrompt}`;
+  const args = [
+    '--print',
+    '--no-session',
+    '--no-tools',
+    '--no-extensions',
+    ...(modelOverride ? ['--model', modelOverride] : []),
+    '--thinking', effort,
+    '--system-prompt', options.systemPrompt,
+    '--append-system-prompt', ' ',
+    '--',
+    userPrompt,
+  ];
+  let stdout = '';
+  let stderr = '';
+  const proc = spawn('omp', args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const timeoutId = setTimeout(() => {
+    proc.kill('SIGTERM');
+    resolve({ success: false, output: '', error: `Timeout after ${timeout}ms (omp backend)`, latencyMs: Date.now() - startTime, level });
+  }, timeout);
+  proc.stdout.on('data', (d) => { stdout += d.toString(); });
+  proc.stderr.on('data', (d) => { stderr += d.toString(); });
+  proc.on('close', (code) => {
+    clearTimeout(timeoutId);
+    const latencyMs = Date.now() - startTime;
+    const output = stdout.trim();
+    // Empty output on exit 0 is still a failure — some providers
+    // intermittently return empty completions; callers must see it.
+    if (code !== 0 || output.length === 0) {
+      resolve({
+        success: false,
+        output,
+        error: (stderr.trim() || `omp exited with code ${code}`) + (output.length === 0 && code === 0 ? ' (empty output)' : ''),
+        latencyMs,
+        level,
+      });
+      return;
+    }
+    if (options.expectJson) {
+      resolve(parseExpectedJson(output, latencyMs, level));
+      return;
+    }
+    resolve({ success: true, output, latencyMs, level });
+  });
+  proc.on('error', (err) => {
+    clearTimeout(timeoutId);
+    resolve({ success: false, output: '', error: err.message, latencyMs: Date.now() - startTime, level });
+  });
+  return promise;
+}
+
+/**
  * Run inference with configurable level
  */
 async function inferenceAttempt(options: InferenceOptions, modelOverride?: string): Promise<InferenceResult> {
@@ -192,6 +321,13 @@ async function inferenceAttempt(options: InferenceOptions, modelOverride?: strin
   const startTime = Date.now();
   const timeout = options.timeout || config.defaultTimeout;
   const model = modelOverride ?? config.model;
+
+  // OMP backend: delegate to a bare `omp` spawn. Default timeouts were tuned
+  // for the claude CLI (low=15s) — floor at 30s for omp cold-start + provider
+  // latency; caller-SUPPLIED timeouts (hook ceilings) are respected untouched.
+  if (resolveBackend() === 'omp') {
+    return ompInferenceAttempt(options, level, config.effort, options.timeout ?? Math.max(timeout, 30000));
+  }
 
   return new Promise((resolve) => {
     // Unset CLAUDECODE so nested `claude` invocations don't trigger the
@@ -449,7 +585,20 @@ export async function inference(options: InferenceOptions): Promise<InferenceRes
   // Validate once here; inferenceAttempt re-validation is then a no-op.
   const normalized: InferenceOptions = { ...options, level };
   const first = await inferenceAttempt(normalized);
-  if (first.success || level !== 'max') return first;
+  if (first.success) return first;
+  const backend = resolveBackend();
+  // 'auto': ANY claude failure → one omp retry (the zero-config cutover path).
+  // Straight to omp rather than the claude rung fallback: auto exists for
+  // CLI/auth death, where EVERY claude rung fails — a rung retry would just
+  // burn another timeout window before the backend that can actually answer.
+  if (backend === 'auto') {
+    console.error(`[Inference] claude backend failed under auto (${first.error}); retrying on omp backend`);
+    const ompTimeout = options.fallbackTimeoutMs ?? options.timeout ?? Math.max(config.defaultTimeout, 30000);
+    return ompInferenceAttempt(normalized, level, config.effort, ompTimeout);
+  }
+  // OMP backend has no model rungs — the max→high fallback would retry the
+  // SAME model. Single attempt, honest failure.
+  if (level !== 'max' || backend === 'omp') return first;
   // The fallback only buys resilience if it resolves to a DIFFERENT model than
   // the one that just failed. Compare at the TIER level (EFFORT_MODEL), not the
   // model string — `config.model` is a pinned ID ("claude-opus-4-8") while
@@ -473,6 +622,7 @@ export async function inference(options: InferenceOptions): Promise<InferenceRes
 }
 
 
+
 /**
  * CLI entry point
  */
@@ -488,6 +638,15 @@ async function main() {
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--json') {
       expectJson = true;
+    } else if (args[i] === '--backend' && args[i + 1]) {
+      const requestedBackend = args[i + 1].toLowerCase();
+      if (requestedBackend === 'claude' || requestedBackend === 'omp' || requestedBackend === 'auto') {
+        process.env.LIFEOS_INFERENCE_BACKEND = requestedBackend;
+      } else {
+        console.error(`Invalid backend: ${args[i + 1]}. Use claude, omp, or auto.`);
+        process.exit(1);
+      }
+      i++;
     } else if (args[i] === '--level' && args[i + 1]) {
       const requestedLevel = args[i + 1].toLowerCase();
       if (['low', 'medium', 'high', 'max'].includes(requestedLevel)) {
@@ -507,7 +666,7 @@ async function main() {
 
 
   if (positionalArgs.length < 2) {
-    console.error('Usage: bun Inference.ts [--level low|medium|high|max] [--json] [--timeout <ms>] <system_prompt> <user_prompt>');
+    console.error('Usage: bun Inference.ts [--level low|medium|high|max] [--backend claude|omp|auto] [--json] [--timeout <ms>] <system_prompt> <user_prompt>');
     process.exit(1);
   }
 

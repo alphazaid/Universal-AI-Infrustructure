@@ -102,10 +102,16 @@ function textMessageFromEntry(entry: any): TranscriptMessage | null {
     return { role, text };
   }
 
-  if (entry?.type === 'message' && (entry.role === 'assistant' || entry.role === 'user')) {
-    const text = contentToText(entry.content) || (typeof entry.text === 'string' ? entry.text : '');
+  if (entry?.type === 'message') {
+    // Two line shapes share type:"message": OpenCode-style top-level
+    // { role, content } and OMP's nested { message: { role, content } }.
+    const role = entry.role ?? entry.message?.role;
+    if (role !== 'assistant' && role !== 'user') return null;
+    const text =
+      contentToText(entry.content ?? entry.message?.content) ||
+      (typeof entry.text === 'string' ? entry.text : '');
     if (!text) return null;
-    return { role: entry.role, text };
+    return { role, text };
   }
 
   return null;
@@ -117,8 +123,12 @@ function isRealUserPrompt(entry: any): boolean {
   }
 
   if (entry?.type === 'message') {
-    const text = contentToText(entry.content) || (typeof entry.text === 'string' ? entry.text : '');
-    return entry.role === 'user' && Boolean(text.trim());
+    // Top-level { role, content } (OpenCode) or nested { message: { role, content } } (OMP).
+    const role = entry.role ?? entry.message?.role;
+    const text =
+      contentToText(entry.content ?? entry.message?.content) ||
+      (typeof entry.text === 'string' ? entry.text : '');
+    return role === 'user' && Boolean(text.trim());
   }
 
   if (entry?.type !== 'human' && entry?.type !== 'user') return false;
@@ -193,7 +203,7 @@ export function parseLastAssistantMessage(transcriptContent: string): string {
  * from previous turns when the Stop hook fires.
  *
  * Within a single turn, there may be multiple assistant entries
- * (text → tool_use → tool_result → more text). All are collected.
+ * (text -> tool_use -> tool_result -> more text). All are collected.
  */
 export function collectCurrentResponseText(transcriptContent: string): string {
   const lines = transcriptContent.trim().split('\n');
