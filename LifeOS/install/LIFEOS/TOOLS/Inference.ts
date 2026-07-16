@@ -35,10 +35,10 @@
  *   high:     opus-tier,   timeout=90s,  effort=high
  *   max:      fable-tier,  timeout=120s, effort=high   (ceiling — was xhigh, flattened 2026-07-06)
  *
- * BILLING: Backend 'claude' (default) uses Claude CLI with subscription (not API key).
- *   Backend 'omp' spawns a bare `omp` session — provider-agnostic, runs on whatever
- *   auth omp holds (e.g. ChatGPT login → codex). Select via LIFEOS_INFERENCE_BACKEND
- *   env var, USER/CONFIG/inference-backend file, or --backend CLI flag.
+ * BILLING: OMP-launched consumers default to the provider-agnostic `omp` backend
+ *   and need no Claude CLI or subscription. Outside OMP, the default remains the
+ *   Claude CLI for backward compatibility. Override via LIFEOS_INFERENCE_BACKEND,
+ *   USER/CONFIG/inference-backend, or --backend.
  * CACHE: Uses --exclude-dynamic-system-prompt-sections for cross-invocation prompt cache hits
  *
  */
@@ -76,17 +76,12 @@ export function normalizeLevel(level: string | undefined): InferenceLevel {
 }
 
 // ── Inference backend selection ─────────────────────────────────────────────
-// 'claude' (default): spawn the `claude` CLI — subscription-billed Anthropic.
-// 'omp':              spawn a bare `omp` session — runs on OMP's own default
-//                     model/auth (any provider). Added 2026-07-15 so the
-//                     intelligence layer (TheRouter, MemoryReviewer,
-//                     SatisfactionCapture, advisor) survives a
-//                     Claude-subscription cancellation.
-// 'auto':             claude first; on ANY claude failure (CLI gone, auth dead,
-//                     API error) retry once on omp. The zero-config cutover:
-//                     cancel Claude and nothing breaks, point OMP at a new
-//                     default model and LifeOS follows.
-// Precedence: LIFEOS_INFERENCE_BACKEND env → USER/CONFIG/inference-backend file → 'claude'.
+// 'claude': explicitly spawn the `claude` CLI — subscription-billed Anthropic.
+// 'omp':    spawn a bare `omp` session on OMP's configured model/auth. OMP hook
+//           subprocesses select this automatically through LIFEOS_HARNESS=omp.
+// 'auto':   Claude first; on ANY Claude failure retry once on OMP.
+// Precedence: LIFEOS_INFERENCE_BACKEND env → USER/CONFIG/inference-backend file
+// → harness default ('omp' under OMP, otherwise backward-compatible 'claude').
 
 export type InferenceBackend = 'claude' | 'omp' | 'auto';
 
@@ -103,8 +98,8 @@ export function resolveBackend(): InferenceBackend {
       if ((VALID_BACKENDS as readonly string[]).includes(v)) return v as InferenceBackend;
       console.error(`[Inference] ignoring invalid backend config '${v}' in ${BACKEND_CONFIG_PATH} (use claude|omp|auto)`);
     }
-  } catch { /* unreadable config → default 'claude' */ }
-  return 'claude';
+  } catch { /* unreadable config → harness default */ }
+  return process.env.LIFEOS_HARNESS?.trim().toLowerCase() === 'omp' ? 'omp' : 'claude';
 }
 
 /** Extract-and-parse a JSON object/array from model output (markdown-tolerant).

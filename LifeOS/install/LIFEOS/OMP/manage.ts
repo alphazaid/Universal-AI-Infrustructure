@@ -103,8 +103,10 @@ function install(): void {
 		process.exit(1);
 	}
 
-	// 1) Symlink the constitution (back up any pre-existing non-symlink file). Modes-aware:
-	// if either variant is already linked, leave it — reinstall must not flip the toggle.
+	// A fresh OMP profile may not have created its agent directory yet.
+	mkdirSync(AGENT_DIR, { recursive: true });
+
+	// 1) Symlink the constitution, backing up a pre-existing non-LifeOS file.
 	if (isOurLink()) {
 		console.log("• APPEND_SYSTEM.md already linked");
 	} else {
@@ -176,31 +178,38 @@ function status(): void {
 	} else {
 		console.log("source: ✓ constitution + extensions + both tool patches present");
 	}
-	const backend = existsSync(INFERENCE_BACKEND_FILE) ? readFileSync(INFERENCE_BACKEND_FILE, "utf8").trim() : "claude (default)";
-	console.log(`inference backend: ${backend}${backend.startsWith("omp") ? " — intelligence layer runs Claude-free" : ""}`);
+	const configuredBackend = existsSync(INFERENCE_BACKEND_FILE)
+		? readFileSync(INFERENCE_BACKEND_FILE, "utf8").trim()
+		: null;
+	const backend = configuredBackend ?? "omp (automatic OMP default)";
+	const claudeFree = configuredBackend === null || configuredBackend === "omp";
+	console.log(`inference backend: ${backend}${claudeFree ? " — intelligence layer runs Claude-free" : ""}`);
 }
 
 /**
- * inference claude|omp|auto|status — pick the backend for the LifeOS intelligence
- * layer (MemoryReviewer, SatisfactionCapture — everything
- * through TOOLS/Inference.ts). 'omp' spawns bare omp sessions on OMP's own
- * default model/auth (any provider — point OMP at a new model and LifeOS
- * follows). 'auto' = claude first, omp on any claude failure (zero-config
- * subscription cutover). Env LIFEOS_INFERENCE_BACKEND overrides per-invocation.
+ * inference default|claude|omp|auto|status — pick the backend for the LifeOS
+ * intelligence layer (MemoryReviewer, SatisfactionCapture — everything through
+ * TOOLS/Inference.ts). With no explicit override, OMP hook subprocesses use bare
+ * omp sessions on OMP's own model/auth; no Claude CLI or subscription is needed.
+ * 'default' clears an override, 'claude' opts in to Claude, and 'auto' tries
+ * Claude first with one OMP retry. LIFEOS_INFERENCE_BACKEND overrides per call.
  */
 function inferenceBackend(state: string): void {
 	if (state === "status" || state === "") {
-		const v = existsSync(INFERENCE_BACKEND_FILE) ? readFileSync(INFERENCE_BACKEND_FILE, "utf8").trim() : "claude (default)";
-		console.log(`inference backend: ${v}`);
+		const configuredBackend = existsSync(INFERENCE_BACKEND_FILE)
+			? readFileSync(INFERENCE_BACKEND_FILE, "utf8").trim()
+			: null;
+		if (configuredBackend) console.log(`inference backend: ${configuredBackend} (explicit override)`);
+		else console.log("inference backend: omp (automatic OMP default; Claude-free)");
 		return;
 	}
-	if (state !== "claude" && state !== "omp" && state !== "auto") {
-		console.error("Usage: bun manage.ts inference {claude|omp|auto|status}");
+	if (state !== "default" && state !== "claude" && state !== "omp" && state !== "auto") {
+		console.error("Usage: bun manage.ts inference {default|claude|omp|auto|status}");
 		process.exit(2);
 	}
-	if (state === "claude") {
+	if (state === "default") {
 		if (existsSync(INFERENCE_BACKEND_FILE)) unlinkSync(INFERENCE_BACKEND_FILE);
-		console.log("✓ inference backend → claude (default restored; config file removed)");
+		console.log("✓ inference backend → omp (automatic OMP default; config override removed)");
 		return;
 	}
 	mkdirSync(dirname(INFERENCE_BACKEND_FILE), { recursive: true });
@@ -209,9 +218,10 @@ function inferenceBackend(state: string): void {
 	if (state === "omp") {
 		console.log("  MemoryReviewer / SatisfactionCapture / Inference.ts consumers now spawn bare omp sessions.");
 		console.log("  Model: OMP's own default (model-agnostic), or pin via LIFEOS_OMP_INFERENCE_MODEL. Effective immediately.");
+	} else if (state === "claude") {
+		console.log("  Explicit Claude CLI backend selected; this requires working Claude authentication.");
 	} else {
-		console.log("  claude first; ANY claude failure (CLI gone, auth dead) retries once on a bare omp session.");
-		console.log("  Cancel the Claude subscription and the intelligence layer follows OMP's default model automatically.");
+		console.log("  Claude first; ANY Claude failure (CLI gone, auth dead) retries once on a bare omp session.");
 	}
 }
 
@@ -225,6 +235,6 @@ else if (command === "modes") {
 }
 else if (command === "inference") inferenceBackend(process.argv[3] ?? "");
 else {
-	console.error("Usage: bun manage.ts {install|uninstall|status|inference claude|omp|auto|status}");
+	console.error("Usage: bun manage.ts {install|uninstall|status|inference default|claude|omp|auto|status}");
 	process.exit(2);
 }

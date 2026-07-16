@@ -5,6 +5,10 @@ extensibility, so a LifeOS install governs OMP sessions the way it governs Claud
 without forking either system. LifeOS is harness-agnostic by design; this is a concrete
 second-harness adapter built on OMP's public extension API.
 
+No Claude CLI, Anthropic account, or Claude subscription is required. The historical
+`~/.claude` directory is LifeOS's shared configuration root; it is a storage path, not a
+runtime dependency on Claude.
+
 ## What it provides
 
 | Piece | Mechanism |
@@ -17,8 +21,8 @@ second-harness adapter built on OMP's public extension API.
 | **Commands** | `extensions/lifeos-commands` — `/e1`–`/e5` (native `setThinkingLevel`), `/interview`, `/cs`, `/context-search`, `/pu`. |
 
 Identity, TELOS, skills, and MCP servers already flow into OMP via its `claude` discovery
-provider, so this subsystem only supplies what that provider does not: the constitution,
-the hooks, and memory injection.
+provider. That provider only reads compatible local files; it does not invoke or authenticate
+the Claude CLI. This subsystem supplies the constitution, hooks, and memory injection.
 
 Full per-hook accounting — what is ported, what is not, why, and what makes this full possible parity: [PARITY.md](./PARITY.md).
 
@@ -33,13 +37,13 @@ bun LIFEOS/OMP/manage.ts status   # what's wired
 Respects `PI_CODING_AGENT_DIR` (works under `omp --profile`). Reversal removes the five
 `extensions:` entries from `config.yml` and the `APPEND_SYSTEM.md` symlink (plus any legacy
 mode-system marker left by a pre-7.x install).
-Inference backend: `bun LIFEOS/OMP/manage.ts inference claude|omp|auto|status` — `omp` re-points
-the intelligence layer (MemoryReviewer, SatisfactionCapture — everything through
-`TOOLS/Inference.ts`) at bare `omp` spawns on **OMP's own default model** (model-agnostic: point
-OMP at any provider/model and LifeOS follows). `auto` = claude first, one omp retry on ANY claude
-failure — the zero-config subscription cutover. Env `LIFEOS_INFERENCE_BACKEND` /
-`LIFEOS_OMP_INFERENCE_MODEL` override per-invocation. Pin models by fully-qualified id
-(`provider/model`) — fuzzy names can resolve to an unauthenticated provider's copy.
+Inference backend: `bun LIFEOS/OMP/manage.ts inference default|claude|omp|auto|status`.
+With no override, OMP hook subprocesses automatically use bare `omp` on **OMP's own default
+model/auth**, so a fresh OMP user gets the complete intelligence layer without Claude.
+`claude` is an explicit opt-in; `auto` tries Claude first and retries once through OMP;
+`default` removes an override and restores the Claude-free OMP default. Environment variables
+`LIFEOS_INFERENCE_BACKEND` and `LIFEOS_OMP_INFERENCE_MODEL` override per invocation. Pin models
+with a fully-qualified `provider/model` ID to avoid resolving an unauthenticated provider copy.
 
 ## CC→OMP event map (adapter)
 
@@ -60,8 +64,8 @@ the adapter continues a turn ONLY on an explicit `decision:block`. Hooks with no
 - `LIFEOS/TOOLS/TranscriptParser.ts` — `textMessageFromEntry()`/`isRealUserPrompt()` read OMP's
   nested `type:"message"` `{ message: { role, content } }` line shape alongside Claude Code's
   `type:"assistant"`, Codex's `response_item`, and OpenCode's top-level `type:"message"`.
-- `LIFEOS/TOOLS/Inference.ts` — optional `omp` backend (see "Inference backend" above);
-  default stays `claude`, so Claude Code / Codex setups are untouched.
+- `LIFEOS/TOOLS/Inference.ts` — harness-aware backend selection: OMP-launched consumers default
+  to `omp`; non-OMP Claude Code/Codex behavior remains unchanged unless explicitly overridden.
 
 All are additive; Claude Code behavior is unchanged.
 

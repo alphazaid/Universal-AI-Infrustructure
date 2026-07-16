@@ -18,7 +18,7 @@ ported, and the remaining delta is exactly (a) four documented OMP architectural
 | Subsystem | CC native | OMP | Mechanism |
 |---|---|---|---|
 | Constitution | `--append-system-prompt` | ✅ | `APPEND_SYSTEM.md` symlink |
-| Identity / TELOS / skills / MCP | `@`-imports + skills dir | ✅ | OMP `claude` discovery provider (no work needed) |
+| Identity / TELOS / skills / MCP | `@`-imports + skills dir | ✅ | OMP `claude` discovery provider reads compatible local files; it does not invoke Claude or require Anthropic authentication |
 | Format regime | 7.x: ONE unified format (modes/tiers retired 2026-07-11, "Bitter Pill") | ✅ | The constitution carries the unified-format contract; StopGates/FormatGate records compliance telemetry. (The pre-7.x mode system is gone — no banners toggle, nothing to classify.) |
 | Memory injection | LoadMemory hook | ✅ | native `lifeos-memory` (+ prompt-keyed retrieval) |
 | Autonomic memory loop | MemoryReviewFire → Reviewer (cadence consolidated upstream 2026-07) | ✅ | adapter + Reviewer patched to read OMP sessions |
@@ -29,7 +29,7 @@ ported, and the remaining delta is exactly (a) four documented OMP architectural
 | Slash commands | commands/*.md | ✅ | /interview /cs /context-search /pu |
 | Voice on completion | VoiceCompletion → ElevenLabs | ✅ gated | Pulse-liveness gate |
 | Statusline | LIFEOS_StatusLine.sh | ✅ full | The REAL script, spawned per turn with synthesized CC-shape stdin; `setWidget` panel (10-line distilled) + compact `setStatus` line with session-scoped `DIRECT` / `ALGO <phase> <effort>` depth. `/statusline on\|off\|refresh` |
-| Install lifecycle | settings.json managed by CC | ✅ | manage.ts install/uninstall/status/inference |
+| Install lifecycle | settings.json managed by CC | ✅ | manage.ts install/uninstall/status/inference; OMP-launched inference defaults to bare `omp`, with Claude available only by explicit override |
 
 ## Hook-by-hook disposition
 

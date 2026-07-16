@@ -211,10 +211,11 @@ async function runHttpHook(spec: HookSpec, ccStdin: Record<string, unknown>): Pr
 	}
 }
 
-function hookEnv(ctx: ExtensionCtx): Record<string, string | undefined> {
+export function hookEnv(ctx: Pick<ExtensionCtx, "cwd">): Record<string, string | undefined> {
 	return {
 		...process.env,
 		LIFEOS_DIR,
+		LIFEOS_HARNESS: "omp",
 		CLAUDE_PROJECT_DIR: ctx.cwd ?? process.cwd(),
 		CLAUDE_PLUGIN_ROOT: CLAUDE_ROOT,
 		CLAUDE_EFFORT: process.env.CLAUDE_EFFORT ?? "E3",
