@@ -28,7 +28,7 @@ ported, and the remaining delta is exactly (a) four documented OMP architectural
 | Effort levers | /e1–/e5 effort routing | ✅ | commands ext → native `setThinkingLevel` |
 | Slash commands | commands/*.md | ✅ | /interview /cs /context-search /pu |
 | Voice on completion | VoiceCompletion → ElevenLabs | ✅ gated | Pulse-liveness gate |
-| Statusline | LIFEOS_StatusLine.sh | ✅ full | The REAL script, spawned per turn with synthesized CC-shape stdin; `setWidget` panel (10-line distilled) + compact `setStatus` line. `/statusline on\|off\|refresh` |
+| Statusline | LIFEOS_StatusLine.sh | ✅ full | The REAL script, spawned per turn with synthesized CC-shape stdin; `setWidget` panel (10-line distilled) + compact `setStatus` line with session-scoped `DIRECT` / `ALGO <phase> <effort>` depth. `/statusline on\|off\|refresh` |
 | Install lifecycle | settings.json managed by CC | ✅ | manage.ts install/uninstall/status/inference |
 
 ## Hook-by-hook disposition
@@ -88,11 +88,10 @@ OMP doesn't expose equivalents to hook subprocesses. Best-effort guard + OMP's o
 
 ## Why this is "full possible parity"
 
-Every surface falls into exactly one of: **ported** (bridged or native), **opt-in ported**
-(mode system — same default posture a fresh CC install negotiates via its router),
+Every surface falls into exactly one of: **ported** (bridged or native),
 **intentionally excluded because CC itself doesn't run it** (the 20 unbound hooks), or
 **impossible under OMP's published extension contract** (the 4 walls + cosmetics). There is
-no fifth bucket — no portable, CC-active behavior is left out. Closing the walls requires
+no fourth bucket — no portable, CC-active behavior is left out. Closing the walls requires
 OMP API changes (approval resolution being the plausible next one), not more porting work.
 
 ## Verifying the claim

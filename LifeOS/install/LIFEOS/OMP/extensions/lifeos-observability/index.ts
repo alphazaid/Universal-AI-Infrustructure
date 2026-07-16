@@ -11,7 +11,7 @@
  * same files. Fail-open: observability must never break a tool call.
  */
 
-import { existsSync, mkdirSync, appendFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, appendFileSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
@@ -54,6 +54,8 @@ const STATUSLINE_SCRIPT = join(LIFEOS_DIR, "LIFEOS_StatusLine.sh");
 const STATUSLINE_OFF_MARKER = join(AGENT_DIR, "lifeos-statusline.off");
 // setWidget string-array content is capped at 10 lines by OMP's TUI.
 const WIDGET_MAX_LINES = 10;
+const WORK_JSON = join(LIFEOS_DIR, "MEMORY", "STATE", "work.json");
+const DIRECT_DEPTH_TAG = " · DIRECT";
 const STATUSLINE_TIMEOUT_MS = 10_000;
 
 const TOOL_NAME_MAP: Record<string, string> = {
@@ -175,16 +177,60 @@ function distillPanel(lines: string[]): string[] {
 	return (content.length > 0 ? content : lines).slice(0, WIDGET_MAX_LINES);
 }
 
+export function workSlugFromToolEvent(event: unknown): string {
+	const input = readField(event, "input") ?? readField(event, "args");
+	const rawPath = readField(input, "path")
+		?? readField(input, "file_path")
+		?? readField(input, "filePath");
+	if (typeof rawPath !== "string") return "";
+	return rawPath.match(/MEMORY\/WORK\/([A-Za-z0-9._-]+)\//)?.[1] ?? "";
+}
+
+export function depthTagForSession(
+	sessionSlug: string,
+	workJson = WORK_JSON,
+): string {
+	if (sessionSlug === "") return DIRECT_DEPTH_TAG;
+	try {
+		const raw = JSON.parse(readFileSync(workJson, "utf-8")) as { sessions?: Record<string, unknown> };
+		const value = (raw.sessions ?? {})[sessionSlug];
+		if (value === null || typeof value !== "object") return DIRECT_DEPTH_TAG;
+		const s = value as { phase?: string; effort?: string };
+		if (typeof s.phase !== "string" || s.phase === "complete") return DIRECT_DEPTH_TAG;
+		return ` · ALGO ${s.phase}${s.effort ? ` ${s.effort}` : ""}`;
+	} catch {
+		return DIRECT_DEPTH_TAG;
+	}
+}
+
 export default function lifeosObservability(pi: ExtensionApi): void {
 	pi.setLabel?.("LifeOS Observability");
 
 	let toolCount = 0;
 	let failCount = 0;
+	// Slug of the ISA THIS session last touched (from tool paths under MEMORY/WORK/<slug>/).
+	// Keys the depth indicator to our own session — work.json is shared across every
+	// harness session, so "most recent row" would show another tab's Algorithm phase.
+	let sessionSlug = "";
+
+	function noteSlugFromEvent(event: unknown): void {
+		sessionSlug = workSlugFromToolEvent(event) || sessionSlug;
+	}
+
+	/**
+	 * Depth indicator — the 7.x-native answer to "which mode was picked": the
+	 * Algorithm writes phase/effort to MEMORY/STATE/work.json as it runs (ISASync).
+	 * Show `ALGO <phase> <effort>` for THIS session's live ISA; otherwise show
+	 * `DIRECT`. Deterministic (file state, not model claims).
+	 */
+	function depthTag(): string {
+		return depthTagForSession(sessionSlug);
+	}
 
 	function paintStatus(ctx: ExtensionCtx): void {
 		if (!ctx.hasUI) return;
 		const fails = failCount > 0 ? ` ✗${failCount}` : "";
-		ctx.ui?.setStatus?.("lifeos", `LifeOS · 🔧${toolCount}${fails}`);
+		ctx.ui?.setStatus?.("lifeos", `LifeOS · 🔧${toolCount}${fails}${depthTag()}`);
 	}
 
 	// ── Full statusline panel (the CC statusline, rendered as an OMP widget) ──
@@ -241,6 +287,7 @@ export default function lifeosObservability(pi: ExtensionApi): void {
 	// ToolActivityTracker parity — one event per completed tool execution.
 	pi.on("tool_execution_end", (event, ctx) => {
 		toolCount++;
+		noteSlugFromEvent(readField(event, "data") ?? event);
 		appendJsonl(ACTIVITY_FILE, {
 			timestamp: new Date().toISOString(),
 			type: "tool_use",
