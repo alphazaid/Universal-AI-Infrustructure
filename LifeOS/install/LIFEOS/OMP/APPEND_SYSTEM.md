@@ -3,11 +3,11 @@
 > Operative LifeOS constitution for the Oh My Pi (OMP) harness — the MODES-OFF variant.
 > Adapted 2026-07-08 from `~/.claude/LIFEOS/LIFEOS_SYSTEM_PROMPT.md`. The portable rules below
 > are faithful to that source. The LifeOS hooks DO run here, bridged by the `lifeos-hooks`
-> adapter (SuccessClaimGate, memory loop, ISA sync, guards, …). Only the mode-banner regime is
-> variant-dependent: in THIS variant, TheRouter classification and OutputFormatGate banner
-> telemetry are dormant; `bun ~/.claude/LIFEOS/OMP/manage.ts modes on` swaps to the modes-ON
-> constitution (`APPEND_SYSTEM_MODES.md`) where the full CC banner system applies. Full
-> source-of-truth constitution and subsystem docs live under `~/.claude/LIFEOS/`.
+> adapter (StopGates, memory loop, ISA sync, guards, …). Only the mode-banner regime is
+> variant-dependent: in THIS variant no banner templates are required;
+> `bun ~/.claude/LIFEOS/OMP/manage.ts modes on` swaps to the modes-ON constitution
+> (`APPEND_SYSTEM_MODES.md`) where the full CC banner system applies (model self-classified).
+> Full source-of-truth constitution and subsystem docs live under `~/.claude/LIFEOS/`.
 
 ## Identity
 

@@ -34,8 +34,8 @@
  *     is informational (returning it as context looped turns — fixed 2026-07-11).
  *   - Fail-open: any error -> that hook contributes nothing.
  *
- * MANIFEST curated from the hook-inventory classification (see PARITY.md). Mode system
- * (TheRouter + OutputFormatGate) toggled by `manage.ts modes on|off`.
+ * MANIFEST curated from the hook-inventory classification (see PARITY.md). Mode system =
+ * constitution swap via `manage.ts modes on|off` (self-classification; TheRouter retired upstream).
  */
 
 import { existsSync } from "node:fs";
@@ -109,21 +109,26 @@ const TOOL_NAME_MAP: Record<string, string> = {
 	web_fetch: "WebFetch",
 };
 
-// Curated from the hook-inventory classification (PARITY.md). Only safe + meaningful-under-OMP hooks.
+// Curated from the hook-inventory classification (PARITY.md), remapped 2026-07-15 to the
+// post-restructure hook set this tree actually ships (upstream's 2026-07-11 hooks BPE pass
+// consolidated/retired several): MemoryReviewTrigger → cadence folded into MemoryReviewFire;
+// OutputFormatGate + SuccessClaimGate → StopGates (FormatGate + VerificationGate + WritingGate);
+// TheRouter / TelosSummarySync / RelationshipMemory / ArtWorkflowGuard → retired upstream, no
+// successor (modes-on classification = the constitution's model self-classification fallback).
 const MANIFEST: HookSpec[] = [
 	// before_agent_start (CC UserPromptSubmit / SessionStart-once)
 	{ file: "LoadContext.hook.ts", ompEvent: "before_agent_start", ccEvent: "SessionStart", once: true, timeoutMs: 8000 },
 	{ file: "MemoryDeltaSurface.hook.ts", ompEvent: "before_agent_start", ccEvent: "UserPromptSubmit", timeoutMs: 8000 },
-	{ file: "MemoryReviewTrigger.hook.ts", ompEvent: "before_agent_start", ccEvent: "UserPromptSubmit", fireAndForget: true, timeoutMs: 5000 },
+	// MemoryReviewTrigger retired: MemoryReviewFire (session_stop, below) owns the whole cadence.
 	{ file: "SatisfactionCapture.hook.ts", ompEvent: "before_agent_start", ccEvent: "UserPromptSubmit", fireAndForget: true, timeoutMs: 20000 },
 	{ file: "ReminderRouter.hook.ts", ompEvent: "before_agent_start", ccEvent: "UserPromptSubmit", fireAndForget: true, timeoutMs: 5000 },
 	// tool_result (CC PostToolUse) — write/edit only; each self-gates on file path
 	{ file: "ISASync.hook.ts", ompEvent: "tool_result", ccEvent: "PostToolUse", matcher: /^(write|edit|multiedit)$/i, timeoutMs: 8000 },
-	{ file: "TelosSummarySync.hook.ts", ompEvent: "tool_result", ccEvent: "PostToolUse", matcher: /^(write|edit|multiedit)$/i, fireAndForget: true, timeoutMs: 8000 },
+	// TelosSummarySync retired upstream (no successor in this tree).
 	{ file: "CheckpointPerISC.hook.ts", ompEvent: "tool_result", ccEvent: "PostToolUse", matcher: /^(write|edit|multiedit)$/i, timeoutMs: 30000 },
 	// tool_call (CC PreToolUse) — guards that block via exit code 2 + stderr
 	{ file: "SystemFileGuard.hook.ts", ompEvent: "tool_call", ccEvent: "PreToolUse", matcher: /^(write|edit|multiedit)$/i, timeoutMs: 5000 },
-	{ file: "ArtWorkflowGuard.hook.ts", ompEvent: "tool_call", ccEvent: "PreToolUse", matcher: /^bash$/i, timeoutMs: 5000 },
+	// ArtWorkflowGuard retired upstream (no successor in this tree).
 	// CC parity: Pulse HTTP-route guard (settings.json type:"http" on the Agent matcher).
 	// OMP has no Skill tool (skills load via read); agent spawns go through task.
 	{ url: "http://localhost:31337/hooks/agent-guard", ompEvent: "tool_call", ccEvent: "PreToolUse", matcher: /^task$/i, gate: "pulse", timeoutMs: 4000 },
@@ -133,17 +138,19 @@ const MANIFEST: HookSpec[] = [
 	{ file: "DocIntegrity.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", timeoutMs: 15000 },
 	{ file: "ISARenderOnStop.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", timeoutMs: 8000 },
 	{ file: "VoiceCompletion.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", gate: "pulse", timeoutMs: 6000 },
-	{ file: "SuccessClaimGate.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", timeoutMs: 8000 },
+	// StopGates = FormatGate (banner telemetry) + VerificationGate (claim-vs-evidence teeth,
+	// successor of SuccessClaimGate) + WritingGate — upstream's ONE Stop-gate hook, ungated
+	// (FormatGate is telemetry-only, so it cannot deadlock modes-off sessions).
+	{ file: "StopGates.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", timeoutMs: 15000 },
 	// session_shutdown (CC SessionEnd)
 	{ file: "UpdateCounts.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 15000 },
 	{ file: "WorkCompletionLearning.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 20000 },
 	{ file: "SessionCleanup.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 8000 },
-	{ file: "RelationshipMemory.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 15000 },
+	// RelationshipMemory retired upstream (no successor in this tree).
 	{ file: "IntegrityCheck.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 10000 },
-	// mode system (CC UserPromptSubmit Router + Stop banner gate) — toggled by manage.ts
-	// `modes on|off` (marker file + constitution swap); LIFEOS_MODES=1 works for one run.
-	{ file: "TheRouter.hook.ts", ompEvent: "before_agent_start", ccEvent: "UserPromptSubmit", toggle: "LIFEOS_MODES", timeoutMs: 35000 },
-	{ file: "OutputFormatGate.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", toggle: "LIFEOS_MODES", timeoutMs: 8000 },
+	// Mode system: the constitution swap (manage.ts modes on|off) is the whole toggle in this
+	// tree — TheRouter (per-prompt classifier) was retired upstream, so modes-on relies on the
+	// constitution's self-classification; StopGates' FormatGate (above) provides the telemetry.
 ];
 
 const firedOnce = new Set<string>();
@@ -368,8 +375,8 @@ function latestAssistantText(ctx: ExtensionCtx): string {
 	return "";
 }
 
-// Transcript surface for Stop / SessionEnd hooks (SuccessClaimGate, VoiceCompletion,
-// RelationshipMemory). transcript_path lets them parse via the (OMP-aware)
+// Transcript surface for Stop / SessionEnd hooks (StopGates, VoiceCompletion,
+// MemoryReviewFire). transcript_path lets them parse via the (OMP-aware)
 // TranscriptParser; last_assistant_message is the robust fallback.
 function stopExtra(ctx: ExtensionCtx): Record<string, unknown> {
 	const extra: Record<string, unknown> = {};
@@ -390,10 +397,10 @@ export default function lifeosHooks(pi: ExtensionApi): void {
 		const eventPrompt = readField(event, "prompt");
 		const prompt = typeof eventPrompt === "string" && eventPrompt.length > 0 ? eventPrompt : latestUserText(ctx);
 		// Surface the pre-turn hook window (CC masks the same span with its spinner). With the
-		// async core the TUI actually paints this now: TheRouter's classify (~4s) when modes
+		// async core the TUI actually paints this now: the memory/context hooks when modes
 		// are on, otherwise the fast context pass (~150ms, barely a flicker).
 		const modesOn = MODES_ON;
-		if (ctx.hasUI) ctx.ui?.setWorkingMessage?.(modesOn ? "LifeOS: classifying mode/effort…" : "LifeOS: loading context…");
+		if (ctx.hasUI) ctx.ui?.setWorkingMessage?.(modesOn ? "LifeOS: context + gates…" : "LifeOS: loading context…");
 		try {
 			const chunks: string[] = [];
 			for (const spec of MANIFEST.filter((s) => s.ompEvent === "before_agent_start")) {
@@ -438,7 +445,7 @@ export default function lifeosHooks(pi: ExtensionApi): void {
 		if (specs.length === 0) return undefined;
 		const ccName = TOOL_NAME_MAP[toolName.toLowerCase()] ?? toolName;
 		// CC PostToolUse stdin carries the ORIGINAL tool_input alongside tool_response;
-		// ISASync/TelosSummarySync/CheckpointPerISC path-gate on tool_input.file_path.
+		// ISASync/CheckpointPerISC path-gate on tool_input.file_path.
 		// Omitting it made them silent no-ops (2026-07-12 finding).
 		const toolInput = toCcToolInput(readField(event, "input") ?? readField(event, "tool_input"));
 		const body = contentToText(event);

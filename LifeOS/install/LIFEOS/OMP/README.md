@@ -12,7 +12,7 @@ second-harness adapter built on OMP's public extension API.
 | **Constitution** | `APPEND_SYSTEM.md` (modes-off) / `APPEND_SYSTEM_MODES.md` (modes-on, full CC banner templates) → `~/.omp/agent/APPEND_SYSTEM.md`. Swap with `manage.ts modes on\|off`. |
 | **Memory** | `extensions/lifeos-memory` — injects the hot-layer `<pai-memory>` block + prompt-keyed KNOWLEDGE retrieval each turn (ports `LoadMemory` + `MemoryRetriever`). |
 | **Safety** | `extensions/lifeos-safety` — native in-process port of `Safety.hook.ts`: blocks dangerous-shape/injection/credential tool calls, tags external content as data. |
-| **Hook adapter** | `extensions/lifeos-hooks` — runs the *real* LifeOS Claude Code hooks against mapped OMP events (CC stdin/stdout protocol) with a `CLAUDE_*` env shim, tool-name mapping, Pulse-availability gating, and the mode-system toggle (TheRouter + OutputFormatGate when modes are on). |
+| **Hook adapter** | `extensions/lifeos-hooks` — runs the *real* LifeOS Claude Code hooks against mapped OMP events (CC stdin/stdout protocol) with a `CLAUDE_*` env shim, tool-name mapping, Pulse-availability gating, and the mode-system toggle (constitution swap; banner telemetry via StopGates). |
 | **Observability** | `extensions/lifeos-observability` — native ToolActivityTracker + ToolFailureTracker (CC jsonl schemas, so Pulse reads both harnesses), a compact statusline (`setStatus`), and the **full LifeOS statusline panel**: runs the real `LIFEOS_StatusLine.sh` with synthesized CC-shape stdin (model/context/harness from live OMP ctx) and renders it as a TUI widget below the editor each turn. Single-sourced — it IS the CC statusline, so it can never drift. `/statusline on\|off\|refresh`; separators distilled to fit the 10-line widget cap. |
 | **Commands** | `extensions/lifeos-commands` — `/e1`–`/e5` (native `setThinkingLevel`), `/interview`, `/cs`, `/context-search`, `/pu`. |
 
@@ -35,7 +35,7 @@ Respects `PI_CODING_AGENT_DIR` (works under `omp --profile`). Reversal removes t
 Mode system: `bun LIFEOS/OMP/manage.ts modes on|off` swaps the constitution variant and the
 enforcement marker together (they can never disagree).
 Inference backend: `bun LIFEOS/OMP/manage.ts inference claude|omp|auto|status` — `omp` re-points
-the intelligence layer (TheRouter, MemoryReviewer, SatisfactionCapture — everything through
+the intelligence layer (MemoryReviewer, SatisfactionCapture — everything through
 `TOOLS/Inference.ts`) at bare `omp` spawns on **OMP's own default model** (model-agnostic: point
 OMP at any provider/model and LifeOS follows). `auto` = claude first, one omp retry on ANY claude
 failure — the zero-config subscription cutover. Env `LIFEOS_INFERENCE_BACKEND` /
@@ -48,8 +48,9 @@ failure — the zero-config subscription cutover. Env `LIFEOS_INFERENCE_BACKEND`
 `PostToolUse→tool_result` · `Stop→session_stop` · `SessionEnd→session_shutdown`.
 
 Bridged hooks are curated for safety: Pulse-coupled hooks are gated behind a liveness probe;
-the mode system (`TheRouter` + `OutputFormatGate`) is opt-in via `manage.ts modes on` because
-it adds a per-turn classifier and mandatory banners. Stop-hook stdout is informational only —
+the mode system (banner constitution + StopGates telemetry) is opt-in via `manage.ts modes on` —
+it mandates banner templates on every reply (classification is the model's own; the per-prompt
+TheRouter classifier was retired upstream). Stop-hook stdout is informational only —
 the adapter continues a turn ONLY on an explicit `decision:block`. Hooks with no OMP analog
 (terminal tabs, CC settings sync) and the hooks not wired in Claude Code's own
 `settings.json` are intentionally not bridged.

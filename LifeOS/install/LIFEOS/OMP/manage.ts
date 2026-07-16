@@ -6,8 +6,8 @@
  *                             and symlink APPEND_SYSTEM.md (idempotent)
  *   bun manage.ts uninstall   remove those wirings (leaves the OMP tree + tool patches)
  *   bun manage.ts status      report what is / isn't wired
- *   bun manage.ts modes on    enable the CC mode system (banner constitution + TheRouter
- *                             + OutputFormatGate marker) — swapped together, never apart
+ *   bun manage.ts modes on    enable the CC mode system (banner constitution + enforcement
+ *                             marker) — swapped together, never apart
  *   bun manage.ts modes off   back to the default (no-banner) constitution
  *
  * The extension SOURCE + adapted constitutions live in this directory (LIFEOS/OMP/),
@@ -191,8 +191,8 @@ function status(): void {
 
 /**
  * modes on|off — swap the constitution variant AND the adapter marker together, so the
- * model's instructions (banners required) and the enforcement hooks (TheRouter +
- * OutputFormatGate) can never disagree — that mismatch would deadlock every response.
+ * model's instructions (banners required) and the Stop-gate telemetry can never
+ * disagree. (TheRouter was retired upstream — modes-on = model self-classification.)
  */
 function modes(state: string): void {
 	if (state !== "on" && state !== "off") {
@@ -208,13 +208,13 @@ function modes(state: string): void {
 	symlinkSync(target, APPEND_LINK);
 	if (state === "on") writeFileSync(MODES_MARKER, `enabled ${new Date().toISOString()}\n`, "utf8");
 	else if (pathExists(MODES_MARKER)) unlinkSync(MODES_MARKER);
-	console.log(`✓ mode system ${state.toUpperCase()} — constitution → ${tildify(target)}${state === "on" ? "; TheRouter + OutputFormatGate active" : "; banner enforcement off"}`);
+	console.log(`✓ mode system ${state.toUpperCase()} — constitution → ${tildify(target)}${state === "on" ? "; self-classification + StopGates telemetry active" : "; banner enforcement off"}`);
 	console.log("Open a fresh omp session to take effect.");
 }
 
 /**
  * inference claude|omp|auto|status — pick the backend for the LifeOS intelligence
- * layer (TheRouter, MemoryReviewer, SatisfactionCapture, advisor — everything
+ * layer (MemoryReviewer, SatisfactionCapture — everything
  * through TOOLS/Inference.ts). 'omp' spawns bare omp sessions on OMP's own
  * default model/auth (any provider — point OMP at a new model and LifeOS
  * follows). 'auto' = claude first, omp on any claude failure (zero-config
@@ -239,7 +239,7 @@ function inferenceBackend(state: string): void {
 	writeFileSync(INFERENCE_BACKEND_FILE, `${state}\n`, "utf8");
 	console.log(`✓ inference backend → ${state} (${tildify(INFERENCE_BACKEND_FILE)})`);
 	if (state === "omp") {
-		console.log("  TheRouter / MemoryReviewer / SatisfactionCapture / advisor now spawn bare omp sessions.");
+		console.log("  MemoryReviewer / SatisfactionCapture / Inference.ts consumers now spawn bare omp sessions.");
 		console.log("  Model: OMP's own default (model-agnostic), or pin via LIFEOS_OMP_INFERENCE_MODEL. Effective immediately.");
 	} else {
 		console.log("  claude first; ANY claude failure (CLI gone, auth dead) retries once on a bare omp session.");

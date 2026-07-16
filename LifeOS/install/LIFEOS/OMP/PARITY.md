@@ -19,9 +19,9 @@ ported, and the remaining delta is exactly (a) four documented OMP architectural
 |---|---|---|---|
 | Constitution | `--append-system-prompt` | ✅ | `APPEND_SYSTEM(.md|_MODES.md)` symlink |
 | Identity / TELOS / skills / MCP | `@`-imports + skills dir | ✅ | OMP `claude` discovery provider (no work needed) |
-| Mode system (Router → banner → gate) | TheRouter + OutputFormatGate | ✅ opt-in | `manage.ts modes on` — constitution + marker swap atomically |
+| Mode system (banner + gate) | constitution templates + StopGates/FormatGate | ✅ opt-in | `manage.ts modes on` — constitution + marker swap atomically. Classification = model self-classification (the per-prompt TheRouter classifier was retired upstream 2026-07) |
 | Memory injection | LoadMemory hook | ✅ | native `lifeos-memory` (+ prompt-keyed retrieval) |
-| Autonomic memory loop | MemoryReviewTrigger/Fire → Reviewer | ✅ | adapter + Reviewer patched to read OMP sessions |
+| Autonomic memory loop | MemoryReviewFire → Reviewer (cadence consolidated upstream 2026-07) | ✅ | adapter + Reviewer patched to read OMP sessions |
 | Safety | Safety.hook.ts (PermissionRequest + PostToolUse) | ✅ deny-half | native `lifeos-safety`; allow-half = wall #1 |
 | Work/ISA sync → Pulse | ISASync, work.json | ✅ | adapter; Pulse reads shared state |
 | Observability → Pulse | ToolActivity/FailureTracker | ✅ | native `lifeos-observability`, same jsonl schemas |
@@ -36,16 +36,20 @@ ported, and the remaining delta is exactly (a) four documented OMP architectural
 ### Bridged through the adapter (real hook files execute; CC stdin/stdout protocol)
 | CC event → OMP event | Hooks |
 |---|---|
-| UserPromptSubmit → before_agent_start | MemoryDeltaSurface, MemoryReviewTrigger, SatisfactionCapture, ReminderRouter, TheRouter (modes-on) |
+| UserPromptSubmit → before_agent_start | MemoryDeltaSurface, SatisfactionCapture, ReminderRouter |
 | SessionStart → before_agent_start (once) | LoadContext |
-| PreToolUse → tool_call | SystemFileGuard, ArtWorkflowGuard (exit-2 block honored), AgentGuard Pulse HTTP route (task calls) |
-| PostToolUse → tool_result | ISASync, TelosSummarySync, CheckpointPerISC |
-| Stop → session_stop | MemoryReviewFire, MemoryHealthGate, DocIntegrity, ISARenderOnStop, VoiceCompletion (Pulse-gated), SuccessClaimGate, OutputFormatGate (modes-on) |
-| SessionEnd → session_shutdown | UpdateCounts, WorkCompletionLearning, SessionCleanup, RelationshipMemory, IntegrityCheck |
+| PreToolUse → tool_call | SystemFileGuard (exit-2 block honored), AgentGuard Pulse HTTP route (task calls) |
+| PostToolUse → tool_result | ISASync, CheckpointPerISC |
+| Stop → session_stop | MemoryReviewFire, MemoryHealthGate, DocIntegrity, ISARenderOnStop, VoiceCompletion (Pulse-gated), StopGates (FormatGate + VerificationGate + WritingGate — successors of OutputFormatGate/SuccessClaimGate) |
+| SessionEnd → session_shutdown | UpdateCounts, WorkCompletionLearning, SessionCleanup, IntegrityCheck |
+
+Retired upstream (2026-07 hooks consolidation), intentionally absent here: TheRouter,
+OutputFormatGate→StopGates, SuccessClaimGate→StopGates, MemoryReviewTrigger→MemoryReviewFire,
+TelosSummarySync, RelationshipMemory, ArtWorkflowGuard.
 
 Adapter fidelity guards (each closed a real silent-failure found in testing): `CLAUDE_*` env shim (PROJECT_DIR/PLUGIN_ROOT/EFFORT), OMP→CC
-tool-name map, tool-INPUT normalization (OMP `path` → CC `tool_input.file_path` — without it every path-gated hook (SystemFileGuard, ISASync, TelosSummarySync, CheckpointPerISC) silently no-op'd; ISASync now verified end-to-end: OMP ISA.md write → work.json updated), `transcript_path` + `last_assistant_message` fed to Stop/SessionEnd hooks,
-Pulse liveness gate, subagent + once guards, CC `async: true` parity (SatisfactionCapture / ReminderRouter / MemoryReviewTrigger / TelosSummarySync run detached fire-and-forget, never blocking the turn — matching their settings.json flags), fail-open (only an explicit `decision:block`
+tool-name map, tool-INPUT normalization (OMP `path` → CC `tool_input.file_path` — without it every path-gated hook (SystemFileGuard, ISASync, CheckpointPerISC) silently no-op'd; ISASync now verified end-to-end: OMP ISA.md write → work.json updated), `transcript_path` + `last_assistant_message` fed to Stop/SessionEnd hooks,
+Pulse liveness gate, subagent + once guards, CC `async: true` parity (SatisfactionCapture / ReminderRouter run detached fire-and-forget, never blocking the turn — matching their settings.json flags), fail-open (only an explicit `decision:block`
 ever affects the turn — Stop-hook stdout is informational, matching CC).
 
 ### Ported natively (in-process — these fire per tool call; subprocess latency unacceptable)
@@ -94,8 +98,8 @@ OMP API changes (approval resolution being the plausible next one), not more por
 ## Verifying the claim
 
 - `bun LIFEOS/OMP/manage.ts status` — wiring + mode state
-- Modes on → any prompt renders the CC template (banner → fields → 🧠 MEMORY → 🗣️), TheRouter
-  logs to `MEMORY/OBSERVABILITY/effort-router.jsonl`, gate telemetry to `format-gate.jsonl`
+- Modes on → any prompt renders the CC template (banner → fields → 🧠 MEMORY → 🗣️) via the
+  model's self-classification; StopGates telemetry lands in `MEMORY/OBSERVABILITY/`
 - Dangerous bash (`chmod -R 777 /tmp/x`) → blocked with `LifeOS Safety blocked Bash: …`
 - Tool runs append to `MEMORY/OBSERVABILITY/tool-activity.jsonl` (CC schema)
 - Session end → reviewer spawn logged in `reviewer-fires.jsonl`

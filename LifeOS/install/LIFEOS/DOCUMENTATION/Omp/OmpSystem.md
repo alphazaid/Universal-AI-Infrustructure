@@ -57,16 +57,19 @@ Fidelity guards (why an adapter, not a symlink):
 
 ### What is / isn't bridged
 
-- **Bridged**: memory (LoadMemory/MemoryDeltaSurface/MemoryReviewTrigger), autonomic loop
-  (MemoryReviewFire → MemoryReviewer), MemoryHealthGate, LoadContext (once), SatisfactionCapture,
-  ReminderRouter, ISASync + TelosSummarySync + CheckpointPerISC (on write/edit), SystemFileGuard +
-  ArtWorkflowGuard, the Pulse agent-guard HTTP route (on task calls, Pulse-gated), DocIntegrity,
-  ISARenderOnStop, VoiceCompletion (Pulse-gated), SuccessClaimGate, UpdateCounts,
-  WorkCompletionLearning, SessionCleanup, RelationshipMemory, IntegrityCheck. Safety and the
-  activity/failure trackers are native (in-process).
-- **Opt-in mode system** (`manage.ts modes on`): `TheRouter` MODE/TIER classification +
-  `OutputFormatGate` banner telemetry, paired with the modes-ON constitution
-  (`APPEND_SYSTEM_MODES.md`) so instructions and enforcement always agree. Stop-hook stdout is
+- **Bridged**: memory (MemoryDeltaSurface; LoadMemory is native in `lifeos-memory`), autonomic
+  loop (MemoryReviewFire → MemoryReviewer), MemoryHealthGate, LoadContext (once),
+  SatisfactionCapture, ReminderRouter, ISASync + CheckpointPerISC (on write/edit),
+  SystemFileGuard, the Pulse agent-guard HTTP route (on task calls, Pulse-gated), DocIntegrity,
+  ISARenderOnStop, VoiceCompletion (Pulse-gated), StopGates (FormatGate + VerificationGate +
+  WritingGate), UpdateCounts, WorkCompletionLearning, SessionCleanup, IntegrityCheck. Safety and
+  the activity/failure trackers are native (in-process).
+- **Retired upstream** (2026-07 hooks consolidation — intentionally absent): TheRouter,
+  OutputFormatGate + SuccessClaimGate (→ StopGates), MemoryReviewTrigger (→ MemoryReviewFire),
+  TelosSummarySync, RelationshipMemory, ArtWorkflowGuard.
+- **Opt-in mode system** (`manage.ts modes on`): banner constitution
+  (`APPEND_SYSTEM_MODES.md`, model self-classified) + StopGates banner telemetry, swapped with
+  the enforcement marker so instructions and telemetry always agree. Stop-hook stdout is
   informational; the adapter continues a turn only on an explicit `decision:block`.
 - **N/A** (no OMP analog): terminal-tab hooks, CC settings-sync hooks, the SkillGuard Pulse
   route (OMP has no Skill tool). Hooks not wired in Claude Code's `settings.json` are not
