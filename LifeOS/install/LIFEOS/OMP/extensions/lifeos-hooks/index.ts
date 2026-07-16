@@ -34,8 +34,8 @@
  *     is informational (returning it as context looped turns — fixed 2026-07-11).
  *   - Fail-open: any error -> that hook contributes nothing.
  *
- * MANIFEST curated from the hook-inventory classification (see PARITY.md). `manage.ts modes
- * on|off` swaps the constitution: default = 7.x unified format; ON = legacy banner regime.
+ * MANIFEST curated from the hook-inventory classification (see PARITY.md). Output regime is
+ * the constitution's ONE unified format (upstream 7.0.0 retired the mode system).
  */
 
 import { existsSync } from "node:fs";
@@ -56,7 +56,6 @@ interface HookSpec {
 	url?: string;
 	ompEvent: OmpEvent;
 	ccEvent: string;
-	toggle?: string;
 	matcher?: RegExp;
 	timeoutMs?: number;
 	gate?: "pulse";
@@ -88,16 +87,6 @@ const CLAUDE_ROOT = join(HOME, ".claude");
 const HOOKS_DIR = join(CLAUDE_ROOT, "hooks");
 const LIFEOS_DIR = process.env.LIFEOS_DIR ?? join(CLAUDE_ROOT, "LIFEOS");
 const BUN = existsSync(join(HOME, ".bun/bin/bun")) ? join(HOME, ".bun/bin/bun") : "bun";
-// Mode-system toggle: managed by `bun LIFEOS/OMP/manage.ts modes on|off` (marker file +
-// constitution symlink swap). Env var LIFEOS_MODES=1 also works for a single run.
-const AGENT_DIR = process.env.PI_CODING_AGENT_DIR ?? join(HOME, ".omp", "agent");
-const MODES_MARKER = join(AGENT_DIR, "lifeos-modes.on");
-// Snapshot ONCE at extension load (= session start). The constitution variant is also
-// fixed at session start, so reading the marker per-prompt would desync them mid-session:
-// `/modes on` would add router latency immediately while the loaded constitution still
-// suppresses banners. Session-scoping both keeps the atomic-swap invariant and makes
-// "/modes … takes effect next session" literally true.
-const MODES_ON = existsSync(MODES_MARKER) || Boolean(process.env.LIFEOS_MODES);
 
 const TOOL_NAME_MAP: Record<string, string> = {
 	bash: "Bash",
@@ -114,7 +103,7 @@ const TOOL_NAME_MAP: Record<string, string> = {
 // consolidated/retired several): MemoryReviewTrigger → cadence folded into MemoryReviewFire;
 // OutputFormatGate + SuccessClaimGate → StopGates (FormatGate + VerificationGate + WritingGate);
 // TheRouter / TelosSummarySync / RelationshipMemory / ArtWorkflowGuard → retired upstream, no
-// successor — upstream 7.0.0 retired the whole mode system; `modes on` is a legacy banner regime).
+// successor — upstream 7.0.0 retired the whole mode system).
 const MANIFEST: HookSpec[] = [
 	// before_agent_start (CC UserPromptSubmit / SessionStart-once)
 	{ file: "LoadContext.hook.ts", ompEvent: "before_agent_start", ccEvent: "SessionStart", once: true, timeoutMs: 8000 },
@@ -140,7 +129,7 @@ const MANIFEST: HookSpec[] = [
 	{ file: "VoiceCompletion.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", gate: "pulse", timeoutMs: 6000 },
 	// StopGates = FormatGate (banner telemetry) + VerificationGate (claim-vs-evidence teeth,
 	// successor of SuccessClaimGate) + WritingGate — upstream's ONE Stop-gate hook, ungated
-	// (FormatGate is telemetry-only, so it cannot deadlock modes-off sessions).
+	// (FormatGate is telemetry-only — it records format compliance, never blocks).
 	{ file: "StopGates.hook.ts", ompEvent: "session_stop", ccEvent: "Stop", timeoutMs: 15000 },
 	// session_shutdown (CC SessionEnd)
 	{ file: "UpdateCounts.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 15000 },
@@ -148,9 +137,8 @@ const MANIFEST: HookSpec[] = [
 	{ file: "SessionCleanup.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 8000 },
 	// RelationshipMemory retired upstream (no successor in this tree).
 	{ file: "IntegrityCheck.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 10000 },
-	// Format regime: the constitution swap (manage.ts modes on|off) is the whole toggle in this
-	// tree — default is 7.x's ONE unified format; `modes on` opts into the legacy LifeOS-6-style
-	// banner templates. StopGates' FormatGate (above) provides the telemetry either way.
+	// Format regime: ONE unified format per the constitution (upstream 7.0.0 retired the mode
+	// system entirely). StopGates' FormatGate (above) provides banner/format telemetry.
 ];
 
 const firedOnce = new Set<string>();
@@ -299,7 +287,6 @@ async function runHook(spec: HookSpec, ccStdin: Record<string, unknown>, ctx: Ex
 	if (!spec.file) return {};
 	const path = join(HOOKS_DIR, spec.file);
 	if (!existsSync(path)) return {};
-	if (spec.toggle && !MODES_ON) return {};
 
 	// CC `async: true` parity: detached fire-and-forget. Output ignored by contract —
 	// these hooks write state files / observability, never additionalContext the model needs.
@@ -397,10 +384,8 @@ export default function lifeosHooks(pi: ExtensionApi): void {
 		const eventPrompt = readField(event, "prompt");
 		const prompt = typeof eventPrompt === "string" && eventPrompt.length > 0 ? eventPrompt : latestUserText(ctx);
 		// Surface the pre-turn hook window (CC masks the same span with its spinner). With the
-		// async core the TUI actually paints this now: the memory/context hooks when modes
-		// are on, otherwise the fast context pass (~150ms, barely a flicker).
-		const modesOn = MODES_ON;
-		if (ctx.hasUI) ctx.ui?.setWorkingMessage?.(modesOn ? "LifeOS: context + gates…" : "LifeOS: loading context…");
+		// async core the TUI actually paints this: the fast context pass (~150ms, barely a flicker).
+		if (ctx.hasUI) ctx.ui?.setWorkingMessage?.("LifeOS: loading context…");
 		try {
 			const chunks: string[] = [];
 			for (const spec of MANIFEST.filter((s) => s.ompEvent === "before_agent_start")) {

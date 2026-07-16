@@ -1,14 +1,11 @@
 #!/usr/bin/env bun
 /**
- * manage.ts — install / uninstall / status / modes for the LifeOS↔OMP integration.
+ * manage.ts — install / uninstall / status / inference for the LifeOS↔OMP integration.
  *
  *   bun manage.ts install     wire the extensions into ~/.omp/agent/config.yml
  *                             and symlink APPEND_SYSTEM.md (idempotent)
  *   bun manage.ts uninstall   remove those wirings (leaves the OMP tree + tool patches)
  *   bun manage.ts status      report what is / isn't wired
- *   bun manage.ts modes on    enable the CC mode system (banner constitution + enforcement
- *                             marker) — swapped together, never apart
- *   bun manage.ts modes off   back to the default (no-banner) constitution
  *
  * The extension SOURCE + adapted constitutions live in this directory (LIFEOS/OMP/),
  * version-controlled with LifeOS. This script only touches the machine-specific
@@ -28,9 +25,9 @@ const AGENT_DIR = process.env.PI_CODING_AGENT_DIR ?? join(HOME, ".omp", "agent")
 const CONFIG_PATH = join(AGENT_DIR, "config.yml");
 const APPEND_LINK = join(AGENT_DIR, "APPEND_SYSTEM.md");
 const APPEND_SRC = join(SELF_DIR, "APPEND_SYSTEM.md");
-const APPEND_SRC_MODES = join(SELF_DIR, "APPEND_SYSTEM_MODES.md");
 const APPEND_BAK = `${APPEND_LINK}.pre-lifeos.bak`;
-const MODES_MARKER = join(AGENT_DIR, "lifeos-modes.on");
+// Legacy (pre-7.x mode system) marker — cleared if found; nothing writes it anymore.
+const LEGACY_MODES_MARKER = join(AGENT_DIR, "lifeos-modes.on");
 const INFERENCE_BACKEND_FILE = join(HOME, ".claude", "LIFEOS", "USER", "CONFIG", "inference-backend");
 
 const EXTENSION_NAMES = ["lifeos-memory", "lifeos-commands", "lifeos-safety", "lifeos-hooks", "lifeos-observability"];
@@ -64,10 +61,7 @@ function isOurLink(): boolean {
 	try {
 		const st = lstatSync(APPEND_LINK);
 		if (!st.isSymbolicLink()) return false;
-		const target = readlinkSync(APPEND_LINK);
-		// Either constitution variant counts as ours — install() after `modes on` must NOT
-		// clobber the modes symlink back to base while the marker persists (deadlock).
-		return target === APPEND_SRC || target === APPEND_SRC_MODES;
+		return readlinkSync(APPEND_LINK) === APPEND_SRC;
 	} catch {
 		return false;
 	}
@@ -85,7 +79,6 @@ function pathExists(path: string): boolean {
 function verifySource(): string[] {
 	const problems: string[] = [];
 	if (!existsSync(APPEND_SRC)) problems.push(`missing constitution: ${APPEND_SRC}`);
-	if (!existsSync(APPEND_SRC_MODES)) problems.push(`missing modes constitution: ${APPEND_SRC_MODES}`);
 	for (const name of EXTENSION_NAMES) {
 		if (!existsSync(join(SELF_DIR, "extensions", name, "index.ts"))) problems.push(`missing extension: ${name}/index.ts`);
 	}
@@ -161,11 +154,10 @@ function uninstall(): void {
 		console.log("• APPEND_SYSTEM.md not our symlink — left untouched");
 	}
 
-	// 3) Clear the mode-system marker unconditionally — a marker without the modes
-	// constitution is the deadlock state; uninstall must never leave it behind.
-	if (pathExists(MODES_MARKER)) {
-		unlinkSync(MODES_MARKER);
-		console.log("• cleared mode-system marker");
+	// 3) Clear the legacy mode-system marker if a pre-7.x install left one behind.
+	if (pathExists(LEGACY_MODES_MARKER)) {
+		unlinkSync(LEGACY_MODES_MARKER);
+		console.log("• cleared legacy mode-system marker");
 	}
 	console.log("\n✓ Uninstalled the wiring. The LIFEOS/OMP tree + additive tool patches remain (harmless).");
 }
@@ -182,34 +174,10 @@ function status(): void {
 		console.log("source warnings:");
 		for (const p of problems) console.log(`  ! ${p}`);
 	} else {
-		console.log("source: ✓ constitutions + extensions + both tool patches present");
+		console.log("source: ✓ constitution + extensions + both tool patches present");
 	}
-	console.log(`mode system: ${pathExists(MODES_MARKER) ? "ON (banners enforced)" : "off (default)"}`);
 	const backend = existsSync(INFERENCE_BACKEND_FILE) ? readFileSync(INFERENCE_BACKEND_FILE, "utf8").trim() : "claude (default)";
 	console.log(`inference backend: ${backend}${backend.startsWith("omp") ? " — intelligence layer runs Claude-free" : ""}`);
-}
-
-/**
- * modes on|off — swap the constitution variant AND the adapter marker together, so the
- * model's instructions (banners required) and the Stop-gate telemetry can never disagree.
- * (Upstream 7.0.0 retired the mode system — `modes on` is an optional legacy banner regime.)
- */
-function modes(state: string): void {
-	if (state !== "on" && state !== "off") {
-		console.error("Usage: bun manage.ts modes {on|off}");
-		process.exit(2);
-	}
-	const target = state === "on" ? APPEND_SRC_MODES : APPEND_SRC;
-	if (!existsSync(target)) {
-		console.error(`✗ missing constitution variant: ${target}`);
-		process.exit(1);
-	}
-	if (pathExists(APPEND_LINK)) unlinkSync(APPEND_LINK);
-	symlinkSync(target, APPEND_LINK);
-	if (state === "on") writeFileSync(MODES_MARKER, `enabled ${new Date().toISOString()}\n`, "utf8");
-	else if (pathExists(MODES_MARKER)) unlinkSync(MODES_MARKER);
-	console.log(`✓ mode system ${state.toUpperCase()} — constitution → ${tildify(target)}${state === "on" ? "; legacy banner regime + StopGates telemetry active (not 7.x doctrine)" : "; 7.x unified format (default)"}`);
-	console.log("Open a fresh omp session to take effect.");
 }
 
 /**
@@ -251,9 +219,12 @@ const command = process.argv[2];
 if (command === "install") install();
 else if (command === "uninstall") uninstall();
 else if (command === "status") status();
-else if (command === "modes") modes(process.argv[3] ?? "");
+else if (command === "modes") {
+	console.error("`modes` was removed — upstream 7.0.0 retired the mode system (one unified format). Nothing to toggle.");
+	process.exit(2);
+}
 else if (command === "inference") inferenceBackend(process.argv[3] ?? "");
 else {
-	console.error("Usage: bun manage.ts {install|uninstall|status|modes on|modes off|inference claude|omp|auto|status}");
+	console.error("Usage: bun manage.ts {install|uninstall|status|inference claude|omp|auto|status}");
 	process.exit(2);
 }

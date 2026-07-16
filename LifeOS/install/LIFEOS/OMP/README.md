@@ -9,10 +9,10 @@ second-harness adapter built on OMP's public extension API.
 
 | Piece | Mechanism |
 |---|---|
-| **Constitution** | `APPEND_SYSTEM.md` (modes-off) / `APPEND_SYSTEM_MODES.md` (modes-on, full CC banner templates) → `~/.omp/agent/APPEND_SYSTEM.md`. Swap with `manage.ts modes on\|off`. |
+| **Constitution** | `APPEND_SYSTEM.md` → `~/.omp/agent/APPEND_SYSTEM.md` symlink. One unified response format (upstream 7.0.0 retired the mode system). For byte-exact stock behavior, point the symlink at the deployed `LIFEOS/LIFEOS_SYSTEM_PROMPT.md`. |
 | **Memory** | `extensions/lifeos-memory` — injects the hot-layer `<pai-memory>` block + prompt-keyed KNOWLEDGE retrieval each turn (ports `LoadMemory` + `MemoryRetriever`). |
 | **Safety** | `extensions/lifeos-safety` — native in-process port of `Safety.hook.ts`: blocks dangerous-shape/injection/credential tool calls, tags external content as data. |
-| **Hook adapter** | `extensions/lifeos-hooks` — runs the *real* LifeOS Claude Code hooks against mapped OMP events (CC stdin/stdout protocol) with a `CLAUDE_*` env shim, tool-name mapping, Pulse-availability gating, and the mode-system toggle (constitution swap; banner telemetry via StopGates). |
+| **Hook adapter** | `extensions/lifeos-hooks` — runs the *real* LifeOS Claude Code hooks against mapped OMP events (CC stdin/stdout protocol) with a `CLAUDE_*` env shim, tool-name mapping, and Pulse-availability gating. |
 | **Observability** | `extensions/lifeos-observability` — native ToolActivityTracker + ToolFailureTracker (CC jsonl schemas, so Pulse reads both harnesses), a compact statusline (`setStatus`), and the **full LifeOS statusline panel**: runs the real `LIFEOS_StatusLine.sh` with synthesized CC-shape stdin (model/context/harness from live OMP ctx) and renders it as a TUI widget below the editor each turn. Single-sourced — it IS the CC statusline, so it can never drift. `/statusline on\|off\|refresh`; separators distilled to fit the 10-line widget cap. |
 | **Commands** | `extensions/lifeos-commands` — `/e1`–`/e5` (native `setThinkingLevel`), `/interview`, `/cs`, `/context-search`, `/pu`. |
 
@@ -31,11 +31,8 @@ bun LIFEOS/OMP/manage.ts status   # what's wired
 ```
 
 Respects `PI_CODING_AGENT_DIR` (works under `omp --profile`). Reversal removes the five
-`extensions:` entries from `config.yml`, the `APPEND_SYSTEM.md` symlink, and the modes marker.
-Format regime: default = 7.x's ONE unified format (upstream retired modes/tiers 2026-07-11,
-"Bitter Pill"). `bun LIFEOS/OMP/manage.ts modes on|off` opts into/out of an OPTIONAL legacy
-LifeOS-6-style banner regime, swapping the constitution variant and the enforcement marker
-together (they can never disagree).
+`extensions:` entries from `config.yml` and the `APPEND_SYSTEM.md` symlink (plus any legacy
+mode-system marker left by a pre-7.x install).
 Inference backend: `bun LIFEOS/OMP/manage.ts inference claude|omp|auto|status` — `omp` re-points
 the intelligence layer (MemoryReviewer, SatisfactionCapture — everything through
 `TOOLS/Inference.ts`) at bare `omp` spawns on **OMP's own default model** (model-agnostic: point
@@ -49,10 +46,9 @@ failure — the zero-config subscription cutover. Env `LIFEOS_INFERENCE_BACKEND`
 `SessionStart→session_start` · `UserPromptSubmit→before_agent_start` · `PreToolUse→tool_call` ·
 `PostToolUse→tool_result` · `Stop→session_stop` · `SessionEnd→session_shutdown`.
 
-Bridged hooks are curated for safety: Pulse-coupled hooks are gated behind a liveness probe;
-the legacy banner regime (banner constitution + StopGates telemetry) is opt-in via `manage.ts
-modes on` — it mandates LifeOS-6-style templates on every reply, model-chosen (NOT 7.x doctrine:
-upstream's default is one unified format, no modes). Stop-hook stdout is informational only —
+Bridged hooks are curated for safety: Pulse-coupled hooks are gated behind a liveness probe.
+StopGates (FormatGate + VerificationGate + WritingGate) records format/claim telemetry on every
+stop. Stop-hook stdout is informational only —
 the adapter continues a turn ONLY on an explicit `decision:block`. Hooks with no OMP analog
 (terminal tabs, CC settings sync) and the hooks not wired in Claude Code's own
 `settings.json` are intentionally not bridged.

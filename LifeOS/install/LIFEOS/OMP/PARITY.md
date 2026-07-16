@@ -17,9 +17,9 @@ ported, and the remaining delta is exactly (a) four documented OMP architectural
 
 | Subsystem | CC native | OMP | Mechanism |
 |---|---|---|---|
-| Constitution | `--append-system-prompt` | ✅ | `APPEND_SYSTEM(.md|_MODES.md)` symlink |
+| Constitution | `--append-system-prompt` | ✅ | `APPEND_SYSTEM.md` symlink |
 | Identity / TELOS / skills / MCP | `@`-imports + skills dir | ✅ | OMP `claude` discovery provider (no work needed) |
-| Format regime | 7.x: ONE unified format (modes/tiers retired 2026-07-11, "Bitter Pill") | ✅ opt-in legacy | Default = unified format per the constitution. `manage.ts modes on` = OPTIONAL legacy LifeOS-6-style banner regime (three templates, model-chosen; NOT 7.x doctrine) + StopGates/FormatGate telemetry — constitution + marker swap atomically |
+| Format regime | 7.x: ONE unified format (modes/tiers retired 2026-07-11, "Bitter Pill") | ✅ | The constitution carries the unified-format contract; StopGates/FormatGate records compliance telemetry. (The pre-7.x mode system is gone — no banners toggle, nothing to classify.) |
 | Memory injection | LoadMemory hook | ✅ | native `lifeos-memory` (+ prompt-keyed retrieval) |
 | Autonomic memory loop | MemoryReviewFire → Reviewer (cadence consolidated upstream 2026-07) | ✅ | adapter + Reviewer patched to read OMP sessions |
 | Safety | Safety.hook.ts (PermissionRequest + PostToolUse) | ✅ deny-half | native `lifeos-safety`; allow-half = wall #1 |
@@ -29,7 +29,7 @@ ported, and the remaining delta is exactly (a) four documented OMP architectural
 | Slash commands | commands/*.md | ✅ | /interview /cs /context-search /pu |
 | Voice on completion | VoiceCompletion → ElevenLabs | ✅ gated | Pulse-liveness gate |
 | Statusline | LIFEOS_StatusLine.sh | ✅ full | The REAL script, spawned per turn with synthesized CC-shape stdin; `setWidget` panel (10-line distilled) + compact `setStatus` line. `/statusline on\|off\|refresh` |
-| Install lifecycle | settings.json managed by CC | ✅ | manage.ts install/uninstall/status/modes |
+| Install lifecycle | settings.json managed by CC | ✅ | manage.ts install/uninstall/status/inference |
 
 ## Hook-by-hook disposition
 
@@ -97,9 +97,9 @@ OMP API changes (approval resolution being the plausible next one), not more por
 
 ## Verifying the claim
 
-- `bun LIFEOS/OMP/manage.ts status` — wiring + mode state
-- Modes on (legacy regime) → any prompt renders the LifeOS-6-style template (banner → fields →
-  🧠 MEMORY → 🗣️), model-chosen; StopGates telemetry lands in `MEMORY/OBSERVABILITY/`
+- `bun LIFEOS/OMP/manage.ts status` — wiring state
+- Any prompt renders the unified format (banner → answer → 🧠 MEMORY when delta present → 🗣️
+  closer); StopGates telemetry lands in `MEMORY/OBSERVABILITY/`
 - Dangerous bash (`chmod -R 777 /tmp/x`) → blocked with `LifeOS Safety blocked Bash: …`
 - Tool runs append to `MEMORY/OBSERVABILITY/tool-activity.jsonl` (CC schema)
 - Session end → reviewer spawn logged in `reviewer-fires.jsonl`

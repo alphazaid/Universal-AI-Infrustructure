@@ -68,29 +68,24 @@ Fidelity guards (why an adapter, not a symlink):
   modes, tiers, routing, per-mode templates; see `DOCUMENTATION/Router/RouterSystem.md`):
   TheRouter, OutputFormatGate + SuccessClaimGate (→ StopGates), MemoryReviewTrigger
   (→ MemoryReviewFire), TelosSummarySync, RelationshipMemory, ArtWorkflowGuard.
-- **Opt-in LEGACY banner regime** (`manage.ts modes on` — NOT 7.x doctrine, which is one
-  unified format): LifeOS-6-style banner constitution (`APPEND_SYSTEM_MODES.md`, model-chosen
-  templates) + StopGates banner telemetry, swapped with the enforcement marker so instructions
-  and telemetry always agree. Stop-hook stdout is informational; the adapter continues a turn
-  only on an explicit `decision:block`.
 - **N/A** (no OMP analog): terminal-tab hooks, CC settings-sync hooks, the SkillGuard Pulse
   route (OMP has no Skill tool). Hooks not wired in Claude Code's `settings.json` are not
-  bridged either.
+  bridged either. Stop-hook stdout is informational; the adapter continues a turn only on an
+  explicit `decision:block`.
 
 ## Tool patches (additive, Claude-Code-safe)
 
 - `LIFEOS/TOOLS/MemoryReviewer.ts` — `findMostRecentTranscript()` also scans
   `~/.omp/agent/sessions`, so the autonomic loop reviews OMP sessions.
-- `LIFEOS/TOOLS/TranscriptParser.ts` — `normalizeEntry()` reads OMP's `type:"message"` line
-  shape as well as Claude Code's `type:"assistant"`.
+- `LIFEOS/TOOLS/TranscriptParser.ts` — reads OMP's nested `type:"message"` line shape as well
+  as Claude Code's `type:"assistant"`, Codex's `response_item`, and OpenCode's top-level shape.
 
 ## Lifecycle
 
 ```bash
 bun LIFEOS/OMP/manage.ts install     # wire into <agent-dir> (idempotent; backs up config.yml)
-bun LIFEOS/OMP/manage.ts status      # report wiring + mode-system state
-bun LIFEOS/OMP/manage.ts modes on    # CC banner parity: modes constitution + TheRouter + gate
-bun LIFEOS/OMP/manage.ts uninstall   # remove wiring (incl. modes marker); leaves the tree
+bun LIFEOS/OMP/manage.ts status      # report wiring state
+bun LIFEOS/OMP/manage.ts uninstall   # remove wiring; leaves the tree
 ```
 
 `install` merges the five extensions into `<agent-dir>/config.yml` (YAML parse/merge — never

@@ -49,7 +49,6 @@ const OBS_DIR = join(LIFEOS_DIR, "MEMORY", "OBSERVABILITY");
 const ACTIVITY_FILE = join(OBS_DIR, "tool-activity.jsonl");
 const FAILURES_FILE = join(OBS_DIR, "tool-failures.jsonl");
 const AGENT_DIR = process.env.PI_CODING_AGENT_DIR ?? join(HOME, ".omp", "agent");
-const MODES_MARKER = join(AGENT_DIR, "lifeos-modes.on");
 const STATUSLINE_SCRIPT = join(LIFEOS_DIR, "LIFEOS_StatusLine.sh");
 // Full statusline panel opt-out marker (panel defaults ON when the script exists).
 const STATUSLINE_OFF_MARKER = join(AGENT_DIR, "lifeos-statusline.off");
@@ -184,9 +183,8 @@ export default function lifeosObservability(pi: ExtensionApi): void {
 
 	function paintStatus(ctx: ExtensionCtx): void {
 		if (!ctx.hasUI) return;
-		const modes = existsSync(MODES_MARKER) ? "modes:ON" : "modes:off";
 		const fails = failCount > 0 ? ` ✗${failCount}` : "";
-		ctx.ui?.setStatus?.("lifeos", `LifeOS ${modes} · 🔧${toolCount}${fails}`);
+		ctx.ui?.setStatus?.("lifeos", `LifeOS · 🔧${toolCount}${fails}`);
 	}
 
 	// ── Full statusline panel (the CC statusline, rendered as an OMP widget) ──
