@@ -13,7 +13,7 @@ second-harness adapter built on OMP's public extension API.
 | **Memory** | `extensions/lifeos-memory` — injects the hot-layer `<pai-memory>` block + prompt-keyed KNOWLEDGE retrieval each turn (ports `LoadMemory` + `MemoryRetriever`). |
 | **Safety** | `extensions/lifeos-safety` — native in-process port of `Safety.hook.ts`: blocks dangerous-shape/injection/credential tool calls, tags external content as data. |
 | **Hook adapter** | `extensions/lifeos-hooks` — runs the *real* LifeOS Claude Code hooks against mapped OMP events (CC stdin/stdout protocol) with a `CLAUDE_*` env shim, tool-name mapping, Pulse-availability gating, and the mode-system toggle (TheRouter + OutputFormatGate when modes are on). |
-| **Observability** | `extensions/lifeos-observability` — native ToolActivityTracker + ToolFailureTracker (CC jsonl schemas, so Pulse reads both harnesses) + a LifeOS statusline. |
+| **Observability** | `extensions/lifeos-observability` — native ToolActivityTracker + ToolFailureTracker (CC jsonl schemas, so Pulse reads both harnesses), a compact statusline (`setStatus`), and the **full LifeOS statusline panel**: runs the real `LIFEOS_StatusLine.sh` with synthesized CC-shape stdin (model/context/harness from live OMP ctx) and renders it as a TUI widget below the editor each turn. Single-sourced — it IS the CC statusline, so it can never drift. `/statusline on\|off\|refresh`; separators distilled to fit the 10-line widget cap. |
 | **Commands** | `extensions/lifeos-commands` — `/e1`–`/e5` (native `setThinkingLevel`), `/interview`, `/cs`, `/context-search`, `/pu`. |
 
 Identity, TELOS, skills, and MCP servers already flow into OMP via its `claude` discovery
