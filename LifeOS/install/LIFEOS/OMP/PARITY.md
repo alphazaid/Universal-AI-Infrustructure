@@ -28,7 +28,7 @@ ported, and the remaining delta is exactly (a) four documented OMP architectural
 | Effort levers | /e1–/e5 effort routing | ✅ | commands ext → native `setThinkingLevel` |
 | Slash commands | commands/*.md | ✅ | /interview /cs /context-search /pu |
 | Voice on completion | VoiceCompletion → ElevenLabs | ✅ gated | Pulse-liveness gate |
-| Statusline | LIFEOS_StatusLine.sh | ✅ approx | `setStatus` (modes state + tool counts) |
+| Statusline | LIFEOS_StatusLine.sh | ✅ full | The REAL script, spawned per turn with synthesized CC-shape stdin; `setWidget` panel (10-line distilled) + compact `setStatus` line. `/statusline on\|off\|refresh` |
 | Install lifecycle | settings.json managed by CC | ✅ | manage.ts install/uninstall/status/modes |
 
 ## Hook-by-hook disposition
