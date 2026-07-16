@@ -41,9 +41,9 @@
 
 <!-- Content -->
 [![Get Started](https://img.shields.io/badge/🚀_Get_Started-Install-22C55E?style=flat)](#-installation)
-[![Release v5.0.0](https://img.shields.io/badge/📦_Release-v5.0.0-8B5CF6?style=flat)](Releases/v5.0.0/)
-[![Algorithm v6.3.0](https://img.shields.io/badge/Algorithm-v6.3.0-D97706?style=flat)](Releases/v5.0.0/.claude/PAI/ALGORITHM/v6.3.0.md)
-[![Pulse](https://img.shields.io/badge/Pulse-included-3B82F6?style=flat)](Releases/v5.0.0/.claude/PAI/PULSE/)
+[![Release v5.0.0](https://img.shields.io/badge/📦_Release-v5.0.0-8B5CF6?style=flat)](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/)
+[![Algorithm v6.3.0](https://img.shields.io/badge/Algorithm-v6.3.0-D97706?style=flat)](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/.claude/PAI/ALGORITHM/v6.3.0.md)
+[![Pulse](https://img.shields.io/badge/Pulse-included-3B82F6?style=flat)](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/.claude/PAI/PULSE/)
 [![Contributors](https://img.shields.io/github/contributors/jSydorowicz21/Universal-AI-Infrustructure?style=flat&logo=githubsponsors&logoColor=white&label=Contributors&color=EC4899)](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/graphs/contributors)
 
 <!-- Tech Stack -->
@@ -56,7 +56,7 @@
 
 **Overview:** [What PAI Is](#what-pai-is) · [Principles](#principles) · [Features](#features)
 
-**Get Started:** [Installation](#-installation) · [Releases](Releases/) · [Packs](Packs/)
+**Get Started:** [Installation](#-installation) · [Releases](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/) · [Packs](Packs/)
 
 **Resources:** [FAQ](#-faq) · [Roadmap](#-roadmap) · [Community](#-community) · [Contributing](#-contributing)
 
@@ -86,11 +86,11 @@ Most documentation below is inherited from upstream PAI and describes the PAI sy
 > [!IMPORTANT]
 > **PAI v5.0.0 — Life Operating System** — the biggest release in PAI history. PAI is no longer "AI scaffolding" — it's a **Life Operating System** with the unified **Pulse** daemon (Life Dashboard at `localhost:31337`), a **DA** (Digital Assistant) identity layer, **Algorithm v6.3.0** (Current State → Ideal State, seven phases, classifier-driven mode + tier), the **ISA** primitive (universal "ideal state" articulation), 45 skills, 171 workflows, 37 hooks, and structural privacy via containment zones.
 >
-> **[v5.0.0 release notes →](Releases/v5.0.0/README.md)** | **[All releases →](Releases/)**
+> **[v5.0.0 release notes →](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/README.md)** | **[All releases →](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/)**
 >
 > **One-line install:** `curl -sSL https://ourpai.ai/install.sh | bash`
 >
-> Upgrading from v4.x? This is a different system, not a patch. Read the [migration guide](Releases/v5.0.0/README.md#migration-guide-from-v4x) first.
+> Upgrading from v4.x? This is a different system, not a patch. Read the [migration guide](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/README.md#migration-guide-from-v4x) first.
 
 <div align="center">
 
@@ -192,11 +192,18 @@ We very much believe in AI-based installation and modification of PAI. Once you 
 
 ### Install (clone + run)
 
-UAI has no hosted one-line installer of its own — clone this repo and run the bundled installer:
+UAI has no hosted one-line installer of its own — clone this repo and run the bundled installer.
+
+> **Note:** the `Releases/` bundle was retired from `main` when the upstream LifeOS restructure
+> was merged (upstream moved to GitHub Releases; the new installer lives at `LifeOS/`). The UAI
+> installer flow below still works — check out the pinned pre-restructure commit first. Porting
+> the installer to the new layout is tracked as Phase-2 work.
 
 ```bash
 git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git
-cd Universal-AI-Infrustructure/Releases/v5.0.0
+cd Universal-AI-Infrustructure
+git checkout 68f501b2   # last commit carrying the Releases/v5.0.0 bundle
+cd Releases/v5.0.0
 cp -R .claude ~/ && cd ~/.claude && ./install.sh
 ```
 
@@ -216,31 +223,35 @@ After install, or any time startup reports a PAI self-check warning, run `k doct
 
 For small fixes after PAI is already installed, use the hotfix updater instead of re-running the full installer. It fetches the release bundle, reads `hotfix-manifest.json`, backs up touched files under `~/.pai/BACKUPS/`, and overlays only managed PAI files. It does not overwrite `USER`, `MEMORY`, auth, env files, framework config, or hook trust state.
 
-From a cloned checkout:
+From a cloned checkout (at the pinned `68f501b2` commit — see the install note above):
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Releases\v5.0.0\.claude\update-installed.ps1 -Framework codex -SourceDir .
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Releases\v5.0.0\.claude\update-installed.ps1 -Framework codex -SourceDir . -NoPull
 ```
 
 macOS/Linux/WSL:
 
 ```bash
-bash ./Releases/v5.0.0/.claude/update-installed.sh --framework codex --source-dir .
+bash ./Releases/v5.0.0/.claude/update-installed.sh --framework codex --source-dir . --no-pull
 ```
 
-From a machine that already has PAI installed but needs the latest updater from this branch:
+From a machine that already has PAI installed but no checkout: clone at the pinned commit and run
+the bundled updater from it. (The updater's standalone raw-URL mode defaulted to the
+`pai-codex-flawless-runtime` branch, which no longer exists on origin — so always pass a
+`--source-dir` that points at the pinned checkout.)
 
 ```powershell
-$u = "https://raw.githubusercontent.com/jSydorowicz21/Universal-AI-Infrustructure/main/Releases/v5.0.0/.claude/update-installed.ps1"
-$p = Join-Path $env:TEMP "pai-update-installed.ps1"
-Invoke-WebRequest $u -OutFile $p
-powershell -NoProfile -ExecutionPolicy Bypass -File $p -Framework codex
+git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git; cd Universal-AI-Infrustructure
+git checkout 68f501b2
+powershell -NoProfile -ExecutionPolicy Bypass -File .\Releases\v5.0.0\.claude\update-installed.ps1 -Framework codex -SourceDir . -NoPull
 ```
 
 macOS/Linux/WSL:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jSydorowicz21/Universal-AI-Infrustructure/main/Releases/v5.0.0/.claude/update-installed.sh | bash -s -- --framework codex
+git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git && cd Universal-AI-Infrustructure
+git checkout 68f501b2
+bash ./Releases/v5.0.0/.claude/update-installed.sh --framework codex --source-dir . --no-pull
 ```
 
 Use `-Framework claude` or `-Framework opencode` for those targets, or omit `-Framework` to let the updater read `~/.pai/framework.json`.
@@ -267,15 +278,19 @@ Already running upstream PAI and want to switch it to UAI? Clone this repo and r
 
 ```bash
 git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git
-cd Universal-AI-Infrustructure/Releases/v5.0.0/.claude
-bash ./convert-to-uai.sh            # --dry-run to preview, --fetch to pull latest
+cd Universal-AI-Infrustructure
+git checkout 68f501b2   # last commit carrying the Releases/v5.0.0 bundle
+cd Releases/v5.0.0/.claude
+bash ./convert-to-uai.sh            # --dry-run to preview (skip --fetch: it would pull past the bundle)
 ```
 
 Windows PowerShell:
 
 ```powershell
-cd Universal-AI-Infrustructure\Releases\v5.0.0\.claude
-powershell -ExecutionPolicy Bypass -File .\convert-to-uai.ps1   # -DryRun to preview, -Fetch for latest
+cd Universal-AI-Infrustructure
+git checkout 68f501b2
+cd Releases\v5.0.0\.claude
+powershell -ExecutionPolicy Bypass -File .\convert-to-uai.ps1   # -DryRun to preview (skip -Fetch)
 ```
 
 Restart your agent session afterward so instructions reload.
@@ -284,7 +299,9 @@ Restart your agent session afterward so instructions reload.
 
 ```bash
 git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git
-cd Universal-AI-Infrustructure/Releases/v5.0.0
+cd Universal-AI-Infrustructure
+git checkout 68f501b2   # last commit carrying the Releases/v5.0.0 bundle
+cd Releases/v5.0.0
 cp -R .claude ~/
 cd ~/.claude && ./install.sh
 ```
@@ -334,7 +351,7 @@ MCP profile selection also follows the active framework: `pai -m ...` and `pai m
 ### Upgrading from v4.x
 
 > [!IMPORTANT]
-> v5.0.0 is a different system, not a patch. Read the **[full migration guide](Releases/v5.0.0/README.md#migration-guide-from-v4x)** before installing.
+> v5.0.0 is a different system, not a patch. Read the **[full migration guide](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/README.md#migration-guide-from-v4x)** before installing.
 
 Quick path:
 
@@ -521,26 +538,26 @@ MIT License - see [LICENSE](LICENSE) for details.
 - **Memory v7.6** — structured by purpose: WORK (active task ISAs), KNOWLEDGE (typed graph: People, Companies, Ideas, Research, Blogs), LEARNING (meta-patterns), RELATIONSHIP (DA-Principal notes), OBSERVABILITY (every tool call + hook firing + satisfaction signal), STATE (session registry).
 - **45 public skills, 171 workflows, 37 hooks** — skills are self-activating composable domain units; hooks fire across SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, SubagentStop, PreCompact, SessionEnd.
 - **One-line installer** — `curl -sSL https://ourpai.ai/install.sh | bash`. Auto-backs-up existing `~/.claude/`, runs the DA identity wizard, registers Pulse as a launchd service, validates.
-- [Full release notes + migration guide](Releases/v5.0.0/README.md)
+- [Full release notes + migration guide](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/README.md)
 
 **v4.0.3 (2026-03-01) — Community PR Patch**
 - JSON array parsing fix in Inference.ts
 - 29 dead references removed from CONTEXT_ROUTING.md
 - WorldThreatModelHarness PAI_DIR portability
 - User context migration for v2.5/v3.0 upgraders
-- [Release Notes](Releases/v4.0.3/README.md)
+- [Release Notes](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v4.0.3/README.md)
 
 **v4.0.2 (2026-03-01) — Bug Fix Patch**
 - 13 surgical fixes: Linux compatibility, installer, statusline, hooks
 - Cross-platform OAuth token extraction, GNU coreutils tr fix
 - Inference guard (~15s savings), lineage tracking, dead code removal
-- [Release Notes](Releases/v4.0.2/README.md)
+- [Release Notes](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v4.0.2/README.md)
 
 **v4.0.1 (2026-02-28) — Upgrade Path & Preferences**
 - Upgrade documentation with backup, merge, and post-upgrade checklist
 - Configurable temperature unit (Fahrenheit/Celsius) in statusline and installer
 - FAQ fixes: removed stale Python reference, improved recovery guidance
-- [Release Notes](Releases/v4.0.1/README.md)
+- [Release Notes](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v4.0.1/README.md)
 
 **v4.0.0 (2026-02-27) — Lean and Mean**
 - 38 flat skill directories → 12 hierarchical categories (-68% top-level dirs)
@@ -550,7 +567,7 @@ MIT License - see [LICENSE](LICENSE) for details.
 - Comprehensive security sanitization (33+ files cleaned)
 - All version refs updated, Electron crash fix
 - 63 skills, 21 hooks, 180 workflows, 14 agents
-- [Release Notes](Releases/v4.0.0/README.md)
+- [Release Notes](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v4.0.0/README.md)
 
 **v3.0.0 (2026-02-15) — The Algorithm Matures**
 - Algorithm v1.4.0 with constraint extraction and build drift prevention
@@ -558,28 +575,28 @@ MIT License - see [LICENSE](LICENSE) for details.
 - Full installer with GUI wizard
 - 10 new skills, agent teams/swarm, voice personality system
 - 38 skills, 20 hooks, 162 workflows
-- [Release Notes](Releases/v3.0/README.md)
+- [Release Notes](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v3.0/README.md)
 
 **v2.5.0 (2026-01-30) — Think Deeper, Execute Faster**
 - Two-Pass Capability Selection: Hook hints validated against ISC in THINK phase
 - Thinking Tools with Justify-Exclusion: Opt-OUT, not opt-IN for Council, RedTeam, FirstPrinciples, etc.
 - Parallel-by-Default Execution: Independent tasks run concurrently via parallel agent spawning
 - 28 skills, 17 hooks, 356 workflows
-- [Release Notes](Releases/v2.5/README.md)
+- [Release Notes](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v2.5/README.md)
 
 **v2.4.0 (2026-01-23) — The Algorithm**
 - Universal problem-solving system with ISC (Ideal State Criteria) tracking
 - 29 skills, 15 hooks, 331 workflows
 - Euphoric Surprise as the outcome metric
 - Enhanced security with AllowList enforcement
-- [Release Notes](Releases/v2.4/README.md)
+- [Release Notes](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v2.4/README.md)
 
 **v2.3.0 (2026-01-15) — Full Releases Return**
 - Complete `.claude/` directory releases with continuous learning
 - Explicit and implicit rating capture
 - Enhanced hook system with 14 production hooks
 - Status line with learning signal display
-- [Release Notes](Releases/v2.3/README.md)
+- [Release Notes](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v2.3/README.md)
 
 **v2.1.1 (2026-01-09) — MEMORY System Migration**
 - History system merged into core as MEMORY System
