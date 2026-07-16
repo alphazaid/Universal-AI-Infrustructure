@@ -26,7 +26,7 @@ interface ExtensionCtx {
 	hasUI?: boolean;
 	cwd?: string;
 	model?: { id?: string; name?: string };
-	getContextUsage?: () => Promise<ContextUsage | undefined>;
+	getContextUsage?: () => ContextUsage | undefined | Promise<ContextUsage | undefined>;
 	ui?: {
 		setStatus?: (key: string, text: string) => void;
 		notify?: (message: string, level?: string) => void;
@@ -101,6 +101,24 @@ function appendJsonl(file: string, record: Record<string, unknown>): void {
 	}
 }
 
+// omp's own version for the HARN line — resolved once per process (async spawn,
+// never blocks the TUI event loop); runStatusLine awaits it so even the first
+// paint carries it. Fail-open: empty string → the script prints just "OMP".
+const ompVersionPromise: Promise<string> = (() => {
+	const fromEnv = process.env.OMP_VERSION ?? "";
+	if (fromEnv !== "") return Promise.resolve(fromEnv);
+	const { promise, resolve } = Promise.withResolvers<string>();
+	try {
+		const vproc = spawn("omp", ["--version"], { stdio: ["ignore", "pipe", "ignore"] });
+		let vout = "";
+		const timer = setTimeout(() => { vproc.kill("SIGTERM"); resolve(""); }, 3000);
+		vproc.stdout.on("data", (d) => { vout += d.toString(); });
+		vproc.on("close", () => { clearTimeout(timer); resolve(vout.match(/\d+\.\d+[.\d]*/)?.[0] ?? ""); });
+		vproc.on("error", () => { clearTimeout(timer); resolve(""); });
+	} catch { resolve(""); }
+	return promise;
+})();
+
 /**
  * Run the REAL LIFEOS_StatusLine.sh (the same script Claude Code's statusLine
  * setting runs) and return its rendered lines. We synthesize the stdin JSON
@@ -110,13 +128,14 @@ function appendJsonl(file: string, record: Record<string, unknown>): void {
  * the panel can never drift from the CC statusline because it IS the CC
  * statusline.
  */
-function runStatusLine(ctx: ExtensionCtx, usage: ContextUsage | undefined): Promise<string[]> {
+async function runStatusLine(ctx: ExtensionCtx, usage: ContextUsage | undefined): Promise<string[]> {
+	const version = await ompVersionPromise;
 	const { promise, resolve } = Promise.withResolvers<string[]>();
 	const stdin = JSON.stringify({
 		session_id: "omp",
 		workspace: { current_dir: ctx.cwd ?? process.cwd() },
 		model: { display_name: ctx.model?.name ?? ctx.model?.id ?? "unknown" },
-		harness: { name: "OMP", version: process.env.OMP_VERSION ?? "" },
+		harness: { name: "OMP", version },
 		context_window: {
 			context_window_size: usage?.contextWindow ?? 200000,
 			used_percentage: usage?.percent ?? 0,
@@ -182,7 +201,10 @@ export default function lifeosObservability(pi: ExtensionApi): void {
 		if (paintingPanel) return; // one render in flight; turn_end will re-fire
 		paintingPanel = true;
 		try {
-			const usage = await ctx.getContextUsage?.().catch(() => undefined);
+			// getContextUsage is sync in interactive mode, async in print mode —
+			// await normalizes both; NEVER chain .catch on its return.
+			let usage: ContextUsage | undefined;
+			try { usage = await ctx.getContextUsage?.(); } catch { usage = undefined; }
 			const lines = await runStatusLine(ctx, usage);
 			if (lines.length > 0) ctx.ui.setWidget("lifeos-statusline", distillPanel(lines), { placement: "belowEditor" });
 		} catch {
