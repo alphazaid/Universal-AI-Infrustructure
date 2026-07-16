@@ -1,11 +1,14 @@
-# LifeOS Constitutional Layer (OMP-adapted, MODES ON)
+# LifeOS Constitutional Layer (OMP-adapted, MODES ON — legacy optional regime)
 
 > Variant of `APPEND_SYSTEM.md` used when the LifeOS mode system is enabled
 > (`bun LIFEOS/OMP/manage.ts modes on`). Identical constitution, EXCEPT the output-format
-> section: mode banners are REQUIRED here, matching Claude Code native behavior. You classify
-> each turn yourself per the decision rule below (the per-prompt TheRouter classifier was
-> retired upstream); StopGates' FormatGate records banner telemetry at stop. Toggle back
-> with `modes off`.
+> section: LifeOS-6-style mode banners are REQUIRED here. You classify each turn yourself per
+> the decision rule below; StopGates' FormatGate records banner telemetry at stop.
+>
+> HONESTY NOTE: upstream retired the entire mode system on 2026-07-11 (7.0.0 "Bitter Pill" —
+> one unified format, no modes/tiers; see `LIFEOS/DOCUMENTATION/Router/RouterSystem.md`).
+> This variant deliberately re-creates the pre-7.x banner experience for users who want it.
+> It is an OPTIONAL legacy regime, NOT upstream 7.x doctrine. Toggle back with `modes off`.
 
 ## Identity
 

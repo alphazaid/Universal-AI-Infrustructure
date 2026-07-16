@@ -64,13 +64,15 @@ Fidelity guards (why an adapter, not a symlink):
   ISARenderOnStop, VoiceCompletion (Pulse-gated), StopGates (FormatGate + VerificationGate +
   WritingGate), UpdateCounts, WorkCompletionLearning, SessionCleanup, IntegrityCheck. Safety and
   the activity/failure trackers are native (in-process).
-- **Retired upstream** (2026-07 hooks consolidation — intentionally absent): TheRouter,
-  OutputFormatGate + SuccessClaimGate (→ StopGates), MemoryReviewTrigger (→ MemoryReviewFire),
-  TelosSummarySync, RelationshipMemory, ArtWorkflowGuard.
-- **Opt-in mode system** (`manage.ts modes on`): banner constitution
-  (`APPEND_SYSTEM_MODES.md`, model self-classified) + StopGates banner telemetry, swapped with
-  the enforcement marker so instructions and telemetry always agree. Stop-hook stdout is
-  informational; the adapter continues a turn only on an explicit `decision:block`.
+- **Retired upstream** (7.0.0 "Bitter Pill", 2026-07-11 — the ENTIRE mode system went with it:
+  modes, tiers, routing, per-mode templates; see `DOCUMENTATION/Router/RouterSystem.md`):
+  TheRouter, OutputFormatGate + SuccessClaimGate (→ StopGates), MemoryReviewTrigger
+  (→ MemoryReviewFire), TelosSummarySync, RelationshipMemory, ArtWorkflowGuard.
+- **Opt-in LEGACY banner regime** (`manage.ts modes on` — NOT 7.x doctrine, which is one
+  unified format): LifeOS-6-style banner constitution (`APPEND_SYSTEM_MODES.md`, model-chosen
+  templates) + StopGates banner telemetry, swapped with the enforcement marker so instructions
+  and telemetry always agree. Stop-hook stdout is informational; the adapter continues a turn
+  only on an explicit `decision:block`.
 - **N/A** (no OMP analog): terminal-tab hooks, CC settings-sync hooks, the SkillGuard Pulse
   route (OMP has no Skill tool). Hooks not wired in Claude Code's `settings.json` are not
   bridged either.

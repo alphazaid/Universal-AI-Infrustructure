@@ -1,12 +1,17 @@
 # LifeOS Constitutional Layer (OMP-adapted)
 
-> Operative LifeOS constitution for the Oh My Pi (OMP) harness — the MODES-OFF variant.
-> Adapted 2026-07-08 from `~/.claude/LIFEOS/LIFEOS_SYSTEM_PROMPT.md`. The portable rules below
-> are faithful to that source. The LifeOS hooks DO run here, bridged by the `lifeos-hooks`
-> adapter (StopGates, memory loop, ISA sync, guards, …). Only the mode-banner regime is
-> variant-dependent: in THIS variant no banner templates are required;
-> `bun ~/.claude/LIFEOS/OMP/manage.ts modes on` swaps to the modes-ON constitution
-> (`APPEND_SYSTEM_MODES.md`) where the full CC banner system applies (model self-classified).
+> Operative LifeOS constitution for the Oh My Pi (OMP) harness — the default variant.
+> Adapted 2026-07-08 from the LifeOS 6.x `LIFEOS_SYSTEM_PROMPT.md`; behavioral rules
+> (verification, ISC, security, privacy) remain faithful to that lineage. The LifeOS hooks DO
+> run here, bridged by the `lifeos-hooks` adapter (StopGates, memory loop, ISA sync, guards, …).
+>
+> NOTE — upstream 7.0.0 ("Bitter Pill", 2026-07-11) retired the ENTIRE mode system (modes,
+> tiers, routing, per-mode templates) in favor of ONE unified response format; see
+> `LIFEOS/DOCUMENTATION/Router/RouterSystem.md` and `LIFEOS/LIFEOS_SYSTEM_PROMPT.md`. For
+> exact stock-7.x behavior, point the constitution symlink at the deployed
+> `LIFEOS/LIFEOS_SYSTEM_PROMPT.md` itself. The `modes on` variant
+> (`APPEND_SYSTEM_MODES.md`) is an OPTIONAL legacy LifeOS-6-style banner regime — kept for
+> users who prefer visible per-turn templates; it is NOT upstream 7.x doctrine.
 > Full source-of-truth constitution and subsystem docs live under `~/.claude/LIFEOS/`.
 
 ## Identity

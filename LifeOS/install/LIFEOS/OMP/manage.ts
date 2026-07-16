@@ -191,8 +191,8 @@ function status(): void {
 
 /**
  * modes on|off — swap the constitution variant AND the adapter marker together, so the
- * model's instructions (banners required) and the Stop-gate telemetry can never
- * disagree. (TheRouter was retired upstream — modes-on = model self-classification.)
+ * model's instructions (banners required) and the Stop-gate telemetry can never disagree.
+ * (Upstream 7.0.0 retired the mode system — `modes on` is an optional legacy banner regime.)
  */
 function modes(state: string): void {
 	if (state !== "on" && state !== "off") {
@@ -208,7 +208,7 @@ function modes(state: string): void {
 	symlinkSync(target, APPEND_LINK);
 	if (state === "on") writeFileSync(MODES_MARKER, `enabled ${new Date().toISOString()}\n`, "utf8");
 	else if (pathExists(MODES_MARKER)) unlinkSync(MODES_MARKER);
-	console.log(`✓ mode system ${state.toUpperCase()} — constitution → ${tildify(target)}${state === "on" ? "; self-classification + StopGates telemetry active" : "; banner enforcement off"}`);
+	console.log(`✓ mode system ${state.toUpperCase()} — constitution → ${tildify(target)}${state === "on" ? "; legacy banner regime + StopGates telemetry active (not 7.x doctrine)" : "; 7.x unified format (default)"}`);
 	console.log("Open a fresh omp session to take effect.");
 }
 

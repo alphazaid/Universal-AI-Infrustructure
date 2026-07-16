@@ -32,8 +32,10 @@ bun LIFEOS/OMP/manage.ts status   # what's wired
 
 Respects `PI_CODING_AGENT_DIR` (works under `omp --profile`). Reversal removes the five
 `extensions:` entries from `config.yml`, the `APPEND_SYSTEM.md` symlink, and the modes marker.
-Mode system: `bun LIFEOS/OMP/manage.ts modes on|off` swaps the constitution variant and the
-enforcement marker together (they can never disagree).
+Format regime: default = 7.x's ONE unified format (upstream retired modes/tiers 2026-07-11,
+"Bitter Pill"). `bun LIFEOS/OMP/manage.ts modes on|off` opts into/out of an OPTIONAL legacy
+LifeOS-6-style banner regime, swapping the constitution variant and the enforcement marker
+together (they can never disagree).
 Inference backend: `bun LIFEOS/OMP/manage.ts inference claude|omp|auto|status` — `omp` re-points
 the intelligence layer (MemoryReviewer, SatisfactionCapture — everything through
 `TOOLS/Inference.ts`) at bare `omp` spawns on **OMP's own default model** (model-agnostic: point
@@ -48,9 +50,9 @@ failure — the zero-config subscription cutover. Env `LIFEOS_INFERENCE_BACKEND`
 `PostToolUse→tool_result` · `Stop→session_stop` · `SessionEnd→session_shutdown`.
 
 Bridged hooks are curated for safety: Pulse-coupled hooks are gated behind a liveness probe;
-the mode system (banner constitution + StopGates telemetry) is opt-in via `manage.ts modes on` —
-it mandates banner templates on every reply (classification is the model's own; the per-prompt
-TheRouter classifier was retired upstream). Stop-hook stdout is informational only —
+the legacy banner regime (banner constitution + StopGates telemetry) is opt-in via `manage.ts
+modes on` — it mandates LifeOS-6-style templates on every reply, model-chosen (NOT 7.x doctrine:
+upstream's default is one unified format, no modes). Stop-hook stdout is informational only —
 the adapter continues a turn ONLY on an explicit `decision:block`. Hooks with no OMP analog
 (terminal tabs, CC settings sync) and the hooks not wired in Claude Code's own
 `settings.json` are intentionally not bridged.

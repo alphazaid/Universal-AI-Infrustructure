@@ -19,7 +19,7 @@ ported, and the remaining delta is exactly (a) four documented OMP architectural
 |---|---|---|---|
 | Constitution | `--append-system-prompt` | ✅ | `APPEND_SYSTEM(.md|_MODES.md)` symlink |
 | Identity / TELOS / skills / MCP | `@`-imports + skills dir | ✅ | OMP `claude` discovery provider (no work needed) |
-| Mode system (banner + gate) | constitution templates + StopGates/FormatGate | ✅ opt-in | `manage.ts modes on` — constitution + marker swap atomically. Classification = model self-classification (the per-prompt TheRouter classifier was retired upstream 2026-07) |
+| Format regime | 7.x: ONE unified format (modes/tiers retired 2026-07-11, "Bitter Pill") | ✅ opt-in legacy | Default = unified format per the constitution. `manage.ts modes on` = OPTIONAL legacy LifeOS-6-style banner regime (three templates, model-chosen; NOT 7.x doctrine) + StopGates/FormatGate telemetry — constitution + marker swap atomically |
 | Memory injection | LoadMemory hook | ✅ | native `lifeos-memory` (+ prompt-keyed retrieval) |
 | Autonomic memory loop | MemoryReviewFire → Reviewer (cadence consolidated upstream 2026-07) | ✅ | adapter + Reviewer patched to read OMP sessions |
 | Safety | Safety.hook.ts (PermissionRequest + PostToolUse) | ✅ deny-half | native `lifeos-safety`; allow-half = wall #1 |
@@ -98,8 +98,8 @@ OMP API changes (approval resolution being the plausible next one), not more por
 ## Verifying the claim
 
 - `bun LIFEOS/OMP/manage.ts status` — wiring + mode state
-- Modes on → any prompt renders the CC template (banner → fields → 🧠 MEMORY → 🗣️) via the
-  model's self-classification; StopGates telemetry lands in `MEMORY/OBSERVABILITY/`
+- Modes on (legacy regime) → any prompt renders the LifeOS-6-style template (banner → fields →
+  🧠 MEMORY → 🗣️), model-chosen; StopGates telemetry lands in `MEMORY/OBSERVABILITY/`
 - Dangerous bash (`chmod -R 777 /tmp/x`) → blocked with `LifeOS Safety blocked Bash: …`
 - Tool runs append to `MEMORY/OBSERVABILITY/tool-activity.jsonl` (CC schema)
 - Session end → reviewer spawn logged in `reviewer-fires.jsonl`

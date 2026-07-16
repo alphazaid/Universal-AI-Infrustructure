@@ -34,8 +34,8 @@
  *     is informational (returning it as context looped turns — fixed 2026-07-11).
  *   - Fail-open: any error -> that hook contributes nothing.
  *
- * MANIFEST curated from the hook-inventory classification (see PARITY.md). Mode system =
- * constitution swap via `manage.ts modes on|off` (self-classification; TheRouter retired upstream).
+ * MANIFEST curated from the hook-inventory classification (see PARITY.md). `manage.ts modes
+ * on|off` swaps the constitution: default = 7.x unified format; ON = legacy banner regime.
  */
 
 import { existsSync } from "node:fs";
@@ -114,7 +114,7 @@ const TOOL_NAME_MAP: Record<string, string> = {
 // consolidated/retired several): MemoryReviewTrigger → cadence folded into MemoryReviewFire;
 // OutputFormatGate + SuccessClaimGate → StopGates (FormatGate + VerificationGate + WritingGate);
 // TheRouter / TelosSummarySync / RelationshipMemory / ArtWorkflowGuard → retired upstream, no
-// successor (modes-on classification = the constitution's model self-classification fallback).
+// successor — upstream 7.0.0 retired the whole mode system; `modes on` is a legacy banner regime).
 const MANIFEST: HookSpec[] = [
 	// before_agent_start (CC UserPromptSubmit / SessionStart-once)
 	{ file: "LoadContext.hook.ts", ompEvent: "before_agent_start", ccEvent: "SessionStart", once: true, timeoutMs: 8000 },
@@ -148,9 +148,9 @@ const MANIFEST: HookSpec[] = [
 	{ file: "SessionCleanup.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 8000 },
 	// RelationshipMemory retired upstream (no successor in this tree).
 	{ file: "IntegrityCheck.hook.ts", ompEvent: "session_shutdown", ccEvent: "SessionEnd", timeoutMs: 10000 },
-	// Mode system: the constitution swap (manage.ts modes on|off) is the whole toggle in this
-	// tree — TheRouter (per-prompt classifier) was retired upstream, so modes-on relies on the
-	// constitution's self-classification; StopGates' FormatGate (above) provides the telemetry.
+	// Format regime: the constitution swap (manage.ts modes on|off) is the whole toggle in this
+	// tree — default is 7.x's ONE unified format; `modes on` opts into the legacy LifeOS-6-style
+	// banner templates. StopGates' FormatGate (above) provides the telemetry either way.
 ];
 
 const firedOnce = new Set<string>();
