@@ -108,6 +108,21 @@ PAI is a Life Operating System. It captures who you are, what you care about, an
 - **The DA** — your Digital Assistant. The voice and personality you talk to.
 
 It's designed for individuals first, but the same architecture works for teams, companies, or any entity that wants to articulate what it's trying to be and move toward it.
+Your AI reads the install page and walks the setup, asking permission before it touches anything.
+
+**Prefer the terminal?** There's a one-line shortcut for Claude Code on macOS/Linux:
+
+```bash
+curl -fsSL https://ourlifeos.ai/install.sh | bash
+```
+
+Either path needs a capable AI coding harness — we build and run on [Claude Code](https://docs.claude.com/claude-code) — and [bun](https://bun.sh).
+
+## Core Components
+
+**The unique features** — the parts you won't find anywhere else, plus the subsystems underneath. See them live and click through on **[ourlifeos.ai](https://ourlifeos.ai)**.
+
+<a href="https://ourlifeos.ai"><img src="images/lifeos-core-components.png" width="100%" alt="LifeOS core components — Current→Ideal State, Intent Engineering, General Hill Climbing, Euphoric Surprise, TELOS, the Algorithm, the ISA System, the Skill System, the Hook System, Pulse, Custom Spinner Verbs, and Custom Tooltips. Click to explore them live on ourlifeos.ai." /></a>
 
 ---
 
@@ -499,9 +514,52 @@ MIT License - see [LICENSE](LICENSE) for details.
 
 ### Contributors
 
+LifeOS is built in the open, and the community's pull requests, forensic bug reports, and fresh-install writeups directly shape every release. The public repo is generated from a private source tree, so community PRs are ported into source with credit rather than merged directly — same fix, durable across releases.
+
+<p align="center">
+<a href="https://github.com/danielmiessler"><img src="https://avatars.githubusercontent.com/u/50654?v=4&s=64" width="48" height="48" alt="danielmiessler" title="danielmiessler"></a>
+<a href="https://github.com/christauff"><img src="https://avatars.githubusercontent.com/u/1050379?v=4&s=64" width="48" height="48" alt="christauff" title="christauff"></a>
+<a href="https://github.com/kaimagnus"><img src="https://avatars.githubusercontent.com/u/260860065?v=4&s=64" width="48" height="48" alt="kaimagnus" title="kaimagnus"></a>
+<a href="https://github.com/m4nt0de4"><img src="https://avatars.githubusercontent.com/u/176330864?v=4&s=64" width="48" height="48" alt="m4nt0de4" title="m4nt0de4"></a>
+<a href="https://github.com/ksylvan"><img src="https://avatars.githubusercontent.com/u/1226059?v=4&s=64" width="48" height="48" alt="ksylvan" title="ksylvan"></a>
+<a href="https://github.com/mvoehringer"><img src="https://avatars.githubusercontent.com/u/2719466?v=4&s=64" width="48" height="48" alt="mvoehringer" title="mvoehringer"></a>
+<a href="https://github.com/sauldataman"><img src="https://avatars.githubusercontent.com/u/156217018?v=4&s=64" width="48" height="48" alt="sauldataman" title="sauldataman"></a>
+<a href="https://github.com/sti0"><img src="https://avatars.githubusercontent.com/u/18382402?v=4&s=64" width="48" height="48" alt="sti0" title="sti0"></a>
+<a href="https://github.com/pybe"><img src="https://avatars.githubusercontent.com/u/3582919?v=4&s=64" width="48" height="48" alt="pybe" title="pybe"></a>
+<a href="https://github.com/fayerman-source"><img src="https://avatars.githubusercontent.com/u/234407473?v=4&s=64" width="48" height="48" alt="fayerman-source" title="fayerman-source"></a>
+<a href="https://github.com/neilsoult"><img src="https://avatars.githubusercontent.com/u/5273521?v=4&s=64" width="48" height="48" alt="neilsoult" title="neilsoult"></a>
+<a href="https://github.com/HotSauceHacker"><img src="https://avatars.githubusercontent.com/u/31944906?v=4&s=64" width="48" height="48" alt="HotSauceHacker" title="HotSauceHacker"></a>
+<a href="https://github.com/salmanmkc"><img src="https://avatars.githubusercontent.com/u/32169182?v=4&s=64" width="48" height="48" alt="salmanmkc" title="salmanmkc"></a>
+<a href="https://github.com/Seadubb"><img src="https://avatars.githubusercontent.com/u/174173018?v=4&s=64" width="48" height="48" alt="Seadubb" title="Seadubb"></a>
+<a href="https://github.com/StarksLabs"><img src="https://avatars.githubusercontent.com/u/281132662?v=4&s=64" width="48" height="48" alt="StarksLabs" title="StarksLabs"></a>
+<a href="https://github.com/asdf8675309"><img src="https://avatars.githubusercontent.com/u/174058705?v=4&s=64" width="48" height="48" alt="asdf8675309" title="asdf8675309"></a>
+<a href="https://github.com/imrathion"><img src="https://avatars.githubusercontent.com/u/16126111?v=4&s=64" width="48" height="48" alt="imrathion" title="imrathion"></a>
+<a href="https://github.com/jbmml"><img src="https://avatars.githubusercontent.com/u/52386063?v=4&s=64" width="48" height="48" alt="jbmml" title="jbmml"></a>
+<a href="https://github.com/justinkatz94-glitch"><img src="https://avatars.githubusercontent.com/u/247285317?v=4&s=64" width="48" height="48" alt="justinkatz94-glitch" title="justinkatz94-glitch"></a>
+<a href="https://github.com/bkolendowski"><img src="https://avatars.githubusercontent.com/u/76254268?v=4&s=64" width="48" height="48" alt="bkolendowski" title="bkolendowski"></a>
+<a href="https://github.com/smolcompute"><img src="https://avatars.githubusercontent.com/u/138336591?v=4&s=64" width="48" height="48" alt="smolcompute" title="smolcompute"></a>
+<a href="https://github.com/neilinger"><img src="https://avatars.githubusercontent.com/u/3368283?v=4&s=64" width="48" height="48" alt="neilinger" title="neilinger"></a>
+<a href="https://github.com/Mutdogus"><img src="https://avatars.githubusercontent.com/u/156828?v=4&s=64" width="48" height="48" alt="Mutdogus" title="Mutdogus"></a>
+<a href="https://github.com/qozle"><img src="https://avatars.githubusercontent.com/u/6171907?v=4&s=64" width="48" height="48" alt="qozle" title="qozle"></a>
+<a href="https://github.com/jnpkr"><img src="https://avatars.githubusercontent.com/u/1964102?v=4&s=64" width="48" height="48" alt="jnpkr" title="jnpkr"></a>
+<a href="https://github.com/IJASolutions"><img src="https://avatars.githubusercontent.com/u/246399781?v=4&s=64" width="48" height="48" alt="IJASolutions" title="IJASolutions"></a>
+<a href="https://github.com/emory"><img src="https://avatars.githubusercontent.com/u/660055?v=4&s=64" width="48" height="48" alt="emory" title="emory"></a>
+<a href="https://github.com/maxolasersquad"><img src="https://avatars.githubusercontent.com/u/177150?v=4&s=64" width="48" height="48" alt="maxolasersquad" title="maxolasersquad"></a>
+</p>
+
+<sup>The 28 highest-commit contributors — [see all on the contributors graph](https://github.com/danielmiessler/LifeOS/graphs/contributors). Avatars are committers only, so the lists below carry everyone the graph can't see.</sup>
+
 **[fayerman-source](https://github.com/fayerman-source)** — Google Cloud TTS provider integration and Linux audio support for the voice system.
 
 **Matt Espinoza** — Extensive testing, ideas, and feedback for the PAI 2.3 release, plus roadmap contributions.
+
+**Code contributions (merged or ported PRs):**
+adamlevoy · anikinsasha · asdf8675309 · atabisz · chrisglick · christauff · HotSauceHacker · imrathion · jbmml · jnpkr · justinkatz94-glitch · ksylvan · m4nt0de4 · MarvinDontPanic · maxolasersquad · Mutdogus · neilinger · neilsoult · pybe · qozle · salmanmkc · sauldataman · Seadubb · Spirotot · StarksLabs · thatsjet
+
+**Bug reports, fresh-install forensics, and design feedback:**
+badosanjos · bnkath2o · brycemagera · catchingknives · DAESA24 · deleyva · DennisTraub · docxology · DolphusCY · donovan-sec · DonovanJonesUK · eccentricnode · fjp-veo · harryf · hjbrandt · HyggeHacker · ichoosetoaccept · infinitelyloopy-bt · JElliottMiller · jdrolls · jlacour-git · jmmarkiewicz · karlwaldman · klausagnoletti · lexilexikon · lgangitano · luccomo · MHoroszowski · michaelaye · mygirleatsmayo · nbost130 · NodarDavituri · NorthwoodsSentinel · packetsherpa · ricklesgibson · rikitikitavi2012-debug · Riskjuggler · simeonzickert · Steffen025 · stratofax · tzioup · vanvonlj · virtualian · vpzed · waveman2020-sudo · wojteksbt · xmasyx
+
+<sup>Refreshed with each release. If your contribution is missing, open an issue — that's a bug too.</sup>
 
 ---
 
