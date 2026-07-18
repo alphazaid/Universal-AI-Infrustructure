@@ -28,6 +28,7 @@ import { sendMessage } from "../lib/imessage-send"
 import { join } from "path"
 import { appendFile, mkdir, rename } from "fs/promises"
 import { stripModeScaffolding, hasModeScaffolding } from "../lib/strip-mode-scaffolding"
+import { getLifeosConfigRoot, getLifeosDir } from "../../TOOLS/lib/paths"
 
 // BILLING: Strip ANTHROPIC_API_KEY and ANTHROPIC_AUTH_TOKEN before any SDK
 // query() call. Same rationale as modules/telegram.ts — both outrank OAuth in
@@ -61,10 +62,11 @@ export interface IMessageHealth {
 
 // ── Module State ──
 
-const HOME = process.env.HOME ?? ""
-const CWD = join(HOME, ".claude")
-const STATE_DIR = join(HOME, ".claude", "LIFEOS", "PULSE", "state", "imessage")
-const LOGS_DIR = join(HOME, ".claude", "LIFEOS", "PULSE", "logs", "imessage")
+const CONFIG_ROOT = getLifeosConfigRoot()
+const LIFEOS_DIR = getLifeosDir()
+const CWD = CONFIG_ROOT
+const STATE_DIR = join(LIFEOS_DIR, "PULSE", "state", "imessage")
+const LOGS_DIR = join(LIFEOS_DIR, "PULSE", "logs", "imessage")
 
 let pollTimer: ReturnType<typeof setInterval> | null = null
 let running = false
@@ -165,7 +167,13 @@ async function processMessage(
     // fetch when it is not "desktop". Replies are surfaced through iMessage
     // (text only — no voice channel here, unlike Telegram's sendVoice).
     // Source of truth: hooks/lib/notification-channel.ts.
-    env: { ...process.env, LIFEOS_NOTIFICATION_CHANNEL: "imessage" },
+    env: {
+      ...process.env,
+      CLAUDE_CONFIG_DIR: CONFIG_ROOT,
+      LIFEOS_CONFIG_ROOT: CONFIG_ROOT,
+      LIFEOS_DIR,
+      LIFEOS_NOTIFICATION_CHANNEL: "imessage",
+    },
     maxTurns,
     permissionMode: "bypassPermissions",
     allowDangerouslySkipPermissions: true,

@@ -19,9 +19,10 @@ import {
   inferProposalKind,
   type ProposalTargetKind,
 } from "../../TOOLS/MemoryTypes";
+import { getLifeosDir } from "../../TOOLS/lib/paths";
 
 const HOME = process.env.HOME ?? homedir();
-const OBS_DIR = join(HOME, ".claude", "LIFEOS", "MEMORY", "OBSERVABILITY");
+const OBS_DIR = join(getLifeosDir(), "MEMORY", "OBSERVABILITY");
 const PROPOSAL_REPLIES_LOG_PATH = join(OBS_DIR, "proposal-replies.jsonl");
 const IDENTITY_PROPOSALS_LOG_PATH = join(OBS_DIR, "identity-proposals.jsonl");
 

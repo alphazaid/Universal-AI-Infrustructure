@@ -35,13 +35,12 @@
  *   bun MemoryTypes.ts test                # smoke test
  */
 
-import { resolve as pathResolve, join as pathJoin } from "node:path";
-import { homedir } from "node:os";
+import { join as pathJoin } from "node:path";
+import { getLifeosDir } from "./lib/paths";
 
 // ── Paths ──
 
-const CLAUDE_ROOT = pathResolve(homedir(), ".claude");
-const LIFEOS_DIR = pathJoin(CLAUDE_ROOT, "LIFEOS");
+const LIFEOS_DIR = getLifeosDir();
 const KNOWLEDGE_DIR = pathJoin(LIFEOS_DIR, "MEMORY", "KNOWLEDGE");
 
 export const PRINCIPAL_MEMORY_PATH = pathJoin(LIFEOS_DIR, "USER", "PRINCIPAL", "PRINCIPAL_MEMORY.md");

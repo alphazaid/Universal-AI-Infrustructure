@@ -10,6 +10,11 @@ import { join } from "path"
 import { existsSync } from "fs"
 import { rename } from "fs/promises"
 import { modelForEffort } from "../TOOLS/models.ts"
+import { getLifeosConfigRoot, getLifeosDir } from "../TOOLS/lib/paths.ts"
+const CONFIG_ROOT = getLifeosConfigRoot()
+const LIFEOS_DIR = getLifeosDir()
+const PULSE_DIR = join(LIFEOS_DIR, "PULSE")
+
 
 // ── Types ──
 
@@ -48,10 +53,7 @@ export interface DaemonConfig {
 // written here is automatically stripped from shadow releases. That's the
 // structural privacy lever — no separate scrub policy needed.
 
-export const USER_CRON_PATH = join(
-  process.env.HOME ?? "~",
-  ".claude", "LIFEOS", "USER", "CONFIG", "PULSE.user.toml",
-)
+export const USER_CRON_PATH = join(LIFEOS_DIR, "USER", "CONFIG", "PULSE.user.toml")
 
 export interface JobState {
   lastRun: number
@@ -88,7 +90,7 @@ function jobsFromToml(raw: string, source: JobSource): Job[] {
     schedule: j.schedule as string,
     type: (j.type as "script" | "claude") ?? "script",
     command: j.command ? resolveEnvVars(j.command as string) : undefined,
-    prompt: j.prompt as string | undefined,
+    prompt: j.prompt ? resolveEnvVars(j.prompt as string) : undefined,
     model: (j.model as string) ?? modelForEffort('medium'),
     output: (j.output ?? "log") as OutputTarget | OutputTarget[],
     enabled: (j.enabled as boolean) ?? true,
@@ -318,8 +320,8 @@ const BASH_PATH = Bun.which("bash") ?? "/bin/bash"
 export async function spawnScript(command: string, timeoutMs = 60_000): Promise<string> {
   const proc = Bun.spawn([BASH_PATH, "-c", command], {
     stdout: "pipe",
-    stderr: "pipe",
-    cwd: join(process.env.HOME ?? "~", ".claude", "LIFEOS", "PULSE"),
+    stderr: "ignore",
+    cwd: PULSE_DIR,
     env: { ...process.env },
   })
 
@@ -329,8 +331,7 @@ export async function spawnScript(command: string, timeoutMs = 60_000): Promise<
   clearTimeout(timer)
 
   if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text()
-    throw new Error(`Script exited ${exitCode}: ${stderr.slice(0, 200)}`)
+    throw new Error(`Script exited ${exitCode}; child stderr was suppressed to protect credentials`)
   }
 
   return output.trim()
@@ -368,7 +369,7 @@ export async function spawnClaude(prompt: string, opts: { model: string; timeout
   const proc = Bun.spawn([claudePath, ...args], {
     stdin: new Blob([prompt]),
     stdout: "pipe",
-    stderr: "pipe",
+    stderr: "ignore",
     env,
   })
 
@@ -379,8 +380,7 @@ export async function spawnClaude(prompt: string, opts: { model: string; timeout
   clearTimeout(timer)
 
   if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text()
-    throw new Error(`claude exited ${exitCode}: ${stderr.slice(0, 200)}`)
+    throw new Error(`claude exited ${exitCode}; child stderr was suppressed to protect credentials`)
   }
 
   return output.trim()

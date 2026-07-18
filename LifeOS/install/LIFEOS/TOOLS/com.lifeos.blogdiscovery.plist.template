@@ -58,6 +58,10 @@
 
   <key>EnvironmentVariables</key>
   <dict>
+    <key>LIFEOS_CONFIG_ROOT</key>
+    <string>{{CONFIG_ROOT}}</string>
+    <key>LIFEOS_DIR</key>
+    <string>{{LIFEOS_DIR}}</string>
     <key>PATH</key>
     <string>{{BUN_DIR}}:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
     <key>HOME</key>

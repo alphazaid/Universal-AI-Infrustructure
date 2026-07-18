@@ -199,197 +199,51 @@ A meaningful library of custom thinking skills — first principles, council deb
 
 ## 🚀 Installation
 
-> [!CAUTION]
-> **Project in Active Development** — PAI is evolving rapidly. Expect breaking changes, restructuring, and frequent updates.
+UAI installs from the current `LifeOS/` tree. The retired `Releases/v5.0.0` bundle is historical only and does not contain the OMP integration or the current installer fixes.
 
-### Use your AI to install and run PAI
-
-We very much believe in AI-based installation and modification of PAI. Once you have a working install, point your AI at the system itself — upgrade versions, add skills, modify hooks, change settings, repair anything that breaks. The most important thing your AI can do for you up front is bring all of your existing custom context — notes, project state, preferences, identity, history — into the `PAI/USER/` directory so PAI knows who you are from day one. Tell your DA: *"Help me migrate my context into PAI/USER/."* The system was designed to be operated by AI; lean on it.
-
-### Install (clone + run)
-
-UAI has no hosted one-line installer of its own — clone this repo and run the bundled installer.
-
-> **Note:** the `Releases/` bundle was retired from `main` when the upstream LifeOS restructure
-> was merged (upstream moved to GitHub Releases; the new installer lives at `LifeOS/`). The UAI
-> installer flow below still works — check out the pinned pre-restructure commit first. Porting
-> the installer to the new layout is tracked as Phase-2 work.
+### Recommended: let your AI run the installer
 
 ```bash
 git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git
 cd Universal-AI-Infrustructure
-git checkout 68f501b2   # last commit carrying the Releases/v5.0.0 bundle
-cd Releases/v5.0.0
-cp -R .claude ~/ && cd ~/.claude && ./install.sh
 ```
 
-Windows PowerShell from the cloned release bundle:
+Then tell the coding agent you want to use:
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\.claude\install.ps1
-```
+> Read `LifeOS/INSTALL.md` fully and install LifeOS from this checkout.
 
-That's it. The installer wizard handles Bun, Git, framework selection, agent CLI verification, ElevenLabs key (optional), DA identity setup, voice picker, Pulse launchd registration, and validation. You can target Claude Code, Codex, or OpenCode. The selected framework home is auto-backed-up before anything is overwritten.
+The guide detects the active harness and selected profile, shows every mutation before applying it, installs LifeOS Core, offers optional enhancements, and verifies the resulting runtime.
 
-> **Note:** Upstream PAI offers a hosted one-liner (`curl -sSL https://ourpai.ai/install.sh | bash`) that installs the **original PAI**, not this fork. Always inspect `Releases/v5.0.0/.claude/install.sh` in your clone before running it.
+### Direct bootstrap from the checkout
 
-After install, or any time startup reports a PAI self-check warning, run `k doctor` for AV-safe local diagnostics across the active framework config, hooks/plugins, Pulse, and MCP profiles. Use `k doctor --smoke` for static source smoke checks, or `k doctor --deep` when you intentionally want child/session/install probes.
+The bootstrap stages the current LifeOS skill, then hands off to `/lifeos-setup` for the permissioned system integration.
 
-### Update an existing install
-
-For small fixes after PAI is already installed, use the hotfix updater instead of re-running the full installer. It fetches the release bundle, reads `hotfix-manifest.json`, backs up touched files under `~/.pai/BACKUPS/`, and overlays only managed PAI files. It does not overwrite `USER`, `MEMORY`, auth, env files, framework config, or hook trust state.
-
-From a cloned checkout (at the pinned `68f501b2` commit — see the install note above):
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Releases\v5.0.0\.claude\update-installed.ps1 -Framework codex -SourceDir . -NoPull
-```
-
-macOS/Linux/WSL:
+**macOS / Linux**
 
 ```bash
-bash ./Releases/v5.0.0/.claude/update-installed.sh --framework codex --source-dir . --no-pull
+LIFEOS_SRC="$PWD" bash LifeOS/install/install.sh
 ```
 
-From a machine that already has PAI installed but no checkout: clone at the pinned commit and run
-the bundled updater from it. (The updater's standalone raw-URL mode defaulted to the
-`pai-codex-flawless-runtime` branch, which no longer exists on origin — so always pass a
-`--source-dir` that points at the pinned checkout.)
+**Windows PowerShell**
 
 ```powershell
-git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git; cd Universal-AI-Infrustructure
-git checkout 68f501b2
-powershell -NoProfile -ExecutionPolicy Bypass -File .\Releases\v5.0.0\.claude\update-installed.ps1 -Framework codex -SourceDir . -NoPull
+$env:LIFEOS_SRC = (Get-Location).Path
+powershell -ExecutionPolicy Bypass -File .\LifeOS\install\install.ps1
 ```
 
-macOS/Linux/WSL:
-
-```bash
-git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git && cd Universal-AI-Infrustructure
-git checkout 68f501b2
-bash ./Releases/v5.0.0/.claude/update-installed.sh --framework codex --source-dir . --no-pull
-```
-
-Use `-Framework claude` or `-Framework opencode` for those targets, or omit `-Framework` to let the updater read `~/.pai/framework.json`.
-
-Use `--framework claude` or `--framework opencode` with the shell updater. When the source directory points at a git checkout, the updater runs `git fetch --prune` and `git pull --ff-only` before copying files. Pass `-NoPull` in PowerShell or `--no-pull` in Bash when testing uncommitted local changes.
-
-Rollback restores the files touched by the hotfix from the newest backup:
-
-```bash
-BACKUP="$(ls -dt ~/.pai/BACKUPS/hotfix-* | head -1)"
-cp -a "$BACKUP"/. "$CODEX_HOME"/
-```
-
-PowerShell:
-
-```powershell
-$backup = Get-ChildItem "$HOME\.pai\BACKUPS" -Directory -Filter "hotfix-*" | Sort-Object Name -Descending | Select-Object -First 1
-Get-ChildItem -LiteralPath $backup.FullName -Force | Copy-Item -Destination $env:CODEX_HOME -Recurse -Force
-```
-
-### Convert an existing PAI install to UAI
-
-Already running upstream PAI and want to switch it to UAI? Clone this repo and run the converter — a thin wrapper over the hotfix updater that overlays UAI's managed files onto the framework install recorded in `~/.pai/framework.json` and writes a `~/.pai/distribution.json` marker. It preserves `USER`, `MEMORY`, settings, config, auth, env files, and hook trust state.
-
-```bash
-git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git
-cd Universal-AI-Infrustructure
-git checkout 68f501b2   # last commit carrying the Releases/v5.0.0 bundle
-cd Releases/v5.0.0/.claude
-bash ./convert-to-uai.sh            # --dry-run to preview (skip --fetch: it would pull past the bundle)
-```
-
-Windows PowerShell:
-
-```powershell
-cd Universal-AI-Infrustructure
-git checkout 68f501b2
-cd Releases\v5.0.0\.claude
-powershell -ExecutionPolicy Bypass -File .\convert-to-uai.ps1   # -DryRun to preview (skip -Fetch)
-```
-
-Restart your agent session afterward so instructions reload.
-
-### Manual install (clone + run)
-
-```bash
-git clone https://github.com/jSydorowicz21/Universal-AI-Infrustructure.git
-cd Universal-AI-Infrustructure
-git checkout 68f501b2   # last commit carrying the Releases/v5.0.0 bundle
-cd Releases/v5.0.0
-cp -R .claude ~/
-cd ~/.claude && ./install.sh
-```
-
-On Windows, run `.\.claude\install.ps1` from `Releases\v5.0.0` instead of `install.sh`.
-
-**The installer will:**
-- Ask which agent framework to target: Claude Code, Codex, or OpenCode
-- Verify Bun, Git, and the selected agent CLI are installed
-- Generate native framework files: `CLAUDE.md`/`settings.json`, Codex `AGENTS.md`/`config.toml`/`hooks.json`, or OpenCode `AGENTS.md`/`opencode.json` plus the PAI plugin
-- Link memory and USER context through `~/.pai/` so state survives framework switches
-- Prompt for your ElevenLabs API key (skippable — voice falls back to desktop notifications)
-- Launch the DA identity wizard (name + voice + personality)
-- Set up Pulse as a launchd service (`com.pai.pulse`)
-- Run validation
+Use `LIFEOS_HARNESS=omp`, `claude-code`, `codex`, `gemini`, or `opencode` when more than one installed harness makes auto-detection ambiguous. OMP setup deploys the shared LifeOS runtime and then wires the constitution and five OMP extensions through `LIFEOS/OMP/manage.ts`.
 
 ### After install
 
-```bash
-open http://localhost:31337    # the Life Dashboard
+Restart the harness so its context and extensions reload. Run `/interview` to populate TELOS and identity, then open the dashboard if Pulse was selected:
+
+```text
+http://localhost:31337
 ```
 
-Then run `/interview` in your selected agent framework. Your DA will guide you through:
+### Updating
 
-1. **Phase 1 — TELOS:** Mission, Goals, Beliefs, Wisdom, Challenges, Books, Mental models, Narratives
-2. **Phase 2 — IDEAL_STATE:** What does success look like for you?
-3. **Phase 3 — Preferences:** Tools, conventions, working style
-4. **Phase 4 — Identity:** Final DA personality tuning
-
-This is the most important step. **Without TELOS, your DA has nothing to optimize against.**
-
-### Switching agent frameworks
-
-PAI can switch the active CLI after setup while keeping the same memory store:
-
-```bash
-pai framework status
-pai framework switch codex
-pai framework switch claude
-pai framework switch opencode
-```
-
-Framework switching changes which CLI `pai` launches and regenerates that framework's native config. PAI memory and USER context remain under `~/.pai/MEMORY` and `~/.pai/USER`.
-
-MCP profile selection also follows the active framework: `pai -m ...` and `pai mcp set ...` keep Claude on `.mcp.json`, project MCP servers into Codex `config.toml`, and project them into OpenCode `opencode.json`.
-
-### Upgrading from v4.x
-
-> [!IMPORTANT]
-> v5.0.0 is a different system, not a patch. Read the **[full migration guide](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/README.md#migration-guide-from-v4x)** before installing.
-
-Quick path:
-
-```bash
-# 1. Back up your existing installation
-cp -R ~/.claude ~/.claude.backup-$(date +%Y%m%d)
-
-# 2. Install v5.0.0 (one-liner above) or via manual clone
-curl -sSL https://ourpai.ai/install.sh | bash
-
-# 3. Open the Life Dashboard and run the interview
-open http://localhost:31337
-```
-
-If you had personal content in v4.x (notes, project state, custom rules), tell your DA: *"Help me migrate my old content into the PAI/USER/ structure."* The **Migrate** skill intakes from `.md`/`.markdown`/`.txt`, Obsidian, Notion, Apple Notes — classifies each chunk against the v5 taxonomy (TELOS, KNOWLEDGE, PROJECTS, FEED, etc.) and commits with provenance.
-
-**Post-upgrade checklist:**
-- [ ] Pulse is alive: `curl -s http://localhost:31337/api/pulse/health | jq`
-- [ ] Voice announces: `curl -s -X POST http://localhost:31337/notify -H "Content-Type: application/json" -d '{"message": "Hello from your DA"}'`
-- [ ] Dashboard renders: `open http://localhost:31337`
-- [ ] DA identity populated in `PAI/USER/DA_IDENTITY.md`
-- [ ] TELOS captured under `PAI/USER/TELOS/`
+Pull the newer checkout and follow `LifeOS/Workflows/Update.md`. The update flow overlays managed runtime and skill files transactionally while preserving `USER`, `MEMORY`, unrelated settings, and unowned skills.
 
 ---
 

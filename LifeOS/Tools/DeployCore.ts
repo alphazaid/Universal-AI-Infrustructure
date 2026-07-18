@@ -22,10 +22,10 @@
  *   (dry-run by default — reports the plan per target without writing)
  */
 
-import { existsSync, mkdirSync, readdirSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { copyMissing, detectDevTree } from "./InstallEngine";
+import { basename, dirname, join } from "node:path";
+import { defaultConfigRoot, detectDevTree } from "./InstallEngine";
 
 // Runtime top-level entries this tool does NOT deploy:
 //  - USER           shipped separately as a scaffold (ScaffoldUser) + symlinked (LinkUser)
@@ -33,8 +33,7 @@ import { copyMissing, detectDevTree } from "./InstallEngine";
 //                   empty tree at install so ISASync/hooks/memory writes have a home
 //                   (this is where EmitSkill's "MEMORY scaffolded fresh at setup" becomes true)
 //  - node_modules / .git  never deploy
-// copyMissing's own SKIP_DIRS covers MEMORY when nested, but these
-// are TOP-LEVEL entries of the runtime payload, so we filter them here explicitly.
+// These are TOP-LEVEL entries of the runtime payload, so we filter them here explicitly.
 const RUNTIME_SKIP = new Set(["USER", "MEMORY", "node_modules", ".git"]);
 
 function arg(a: string[], flag: string): string | undefined {
@@ -43,7 +42,7 @@ function arg(a: string[], flag: string): string | undefined {
 }
 
 interface DeployResult {
-  what: "skills" | "runtime" | "memory" | "dependencies";
+  what: "skills" | "runtime" | "hook-prerequisites" | "memory" | "dependencies";
   src: string;
   dst: string;
   present: boolean;
@@ -51,6 +50,47 @@ interface DeployResult {
   actions: string[];
   blockers: string[];
   failures: string[];
+}
+
+function countFiles(root: string): number {
+  if (!existsSync(root)) return 0;
+  if (statSync(root).isFile()) return 1;
+  let count = 0;
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (entry.isDirectory()) count += countFiles(join(root, entry.name));
+    else if (entry.isFile()) count += 1;
+  }
+  return count;
+}
+
+function overlay(src: string, dst: string, preserveExisting = false): { copied: number; failures: string[] } {
+  const parent = dirname(dst);
+  const nonce = `${process.pid}-${Date.now()}`;
+  const stage = join(parent, `.${basename(dst)}.lifeos-stage-${nonce}`);
+  const backup = join(parent, `.${basename(dst)}.lifeos-backup-${nonce}`);
+  let movedExisting = false;
+  try {
+    mkdirSync(parent, { recursive: true });
+    if (preserveExisting && existsSync(dst)) cpSync(dst, stage, { recursive: true, force: true });
+    cpSync(src, stage, { recursive: true, force: true });
+    if (existsSync(dst)) {
+      renameSync(dst, backup);
+      movedExisting = true;
+    }
+    renameSync(stage, dst);
+    if (movedExisting) rmSync(backup, { recursive: true, force: true });
+    return { copied: countFiles(src), failures: [] };
+  } catch (error) {
+    rmSync(stage, { recursive: true, force: true });
+    if (movedExisting && !existsSync(dst) && existsSync(backup)) {
+      try {
+        renameSync(backup, dst);
+      } catch {
+        return { copied: 0, failures: [`${src} → ${dst}: replacement failed and backup restore failed`] };
+      }
+    }
+    return { copied: 0, failures: [`${src} → ${dst}: ${error instanceof Error ? error.message : String(error)}`] };
+  }
 }
 
 /** (a) skills library: install/skills/* → configRoot/skills/ (one copyMissing). */
@@ -62,20 +102,23 @@ function deploySkills(payloadInstall: string, configRoot: string, apply: boolean
     r.blockers.push(`skills payload missing: ${src} — the bare-skill payload is unpopulated (run EmitSkill, or point --skill-root at a staged release)`);
     return r;
   }
-  if (!apply) {
-    r.actions.push(`copyMissing ${src} → ${dst} (never overwrites existing skills)`);
-    return r;
+  const skills = readdirSync(src, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  for (const name of skills) {
+    const skillSrc = join(src, name);
+    const skillDst = join(dst, name);
+    if (!apply) {
+      r.actions.push(`overlay managed skill ${skillSrc} → ${skillDst}`);
+      continue;
+    }
+    const result = overlay(skillSrc, skillDst);
+    r.copied += result.copied;
+    r.failures.push(...result.failures);
   }
-  const { copied, failures } = copyMissing(src, dst);
-  r.copied = copied;
-  r.failures = failures;
   return r;
 }
 
 /** (b) runtime: install/LIFEOS/<entry> → configRoot/LIFEOS/<entry>, skipping RUNTIME_SKIP. */
 function deployRuntime(payloadInstall: string, configRoot: string, apply: boolean): DeployResult {
-  // Prefer canonical all-caps LIFEOS (matches @LIFEOS/... imports on case-sensitive FS);
-  // fall back to the legacy mixed-case dir so pre-fix tarballs still install.
   const src = existsSync(join(payloadInstall, "LIFEOS")) ? join(payloadInstall, "LIFEOS") : join(payloadInstall, "LifeOS");
   const dst = join(configRoot, "LIFEOS");
   const r: DeployResult = { what: "runtime", src, dst, present: existsSync(src), copied: 0, actions: [], blockers: [], failures: [] };
@@ -83,35 +126,77 @@ function deployRuntime(payloadInstall: string, configRoot: string, apply: boolea
     r.blockers.push(`runtime payload missing: ${src} — the bare-skill payload is unpopulated (run EmitSkill, or point --skill-root at a staged release)`);
     return r;
   }
-  // Iterate top-level entries so USER (and the other skips) are excluded while the
-  // rest of the runtime is copied via the shared, never-overwrite copyMissing.
   const entries = readdirSync(src, { withFileTypes: true })
-    .filter((e) => !RUNTIME_SKIP.has(e.name))
-    .map((e) => e.name)
+    .filter((entry) => !RUNTIME_SKIP.has(entry.name))
+    .map((entry) => entry.name)
     .sort();
   if (entries.length === 0) {
     r.blockers.push(`runtime payload at ${src} has nothing to deploy after skipping ${[...RUNTIME_SKIP].join(", ")}`);
     return r;
   }
   for (const name of entries) {
-    const es = join(src, name);
-    const ed = join(dst, name);
+    const entrySrc = join(src, name);
+    const entryDst = join(dst, name);
     if (!apply) {
-      r.actions.push(`copyMissing ${es} → ${ed}`);
+      r.actions.push(`transactionally overlay managed runtime ${entrySrc} → ${entryDst}`);
       continue;
     }
-    const { copied, failures } = copyMissing(es, ed);
-    r.copied += copied;
-    r.failures.push(...failures);
+    const result = overlay(entrySrc, entryDst);
+    r.copied += result.copied;
+    r.failures.push(...result.failures);
   }
   return r;
 }
 
-// MEMORY is NOT shipped in the payload (per-install state), but the runtime writes
-// to it immediately (ISASync → WORK + STATE, hooks → OBSERVABILITY, memory loop →
-// KNOWLEDGE/LEARNING). Without the tree a fresh install throws on first write. This
-// makes EmitSkill's "MEMORY scaffolded fresh at setup" claim actually true.
-const MEMORY_SUBDIRS = ["WORK", "KNOWLEDGE", "LEARNING", "STATE", "OBSERVABILITY", "SKILLS"];
+/** Core OMP and launcher imports require the hook libraries even when hook registration is declined. */
+function deployHookPrerequisites(payloadInstall: string, configRoot: string, apply: boolean): DeployResult {
+  const src = join(payloadInstall, "hooks");
+  const dst = join(configRoot, "hooks");
+  const r: DeployResult = { what: "hook-prerequisites", src, dst, present: existsSync(src), copied: 0, actions: [], blockers: [], failures: [] };
+  if (!r.present) {
+    r.blockers.push(`hook prerequisite payload missing: ${src}`);
+    return r;
+  }
+  if (!apply) {
+    r.actions.push(`transactionally overlay required hook libraries ${src} → ${dst} (registration remains opt-in)`);
+    return r;
+  }
+  const result = overlay(src, dst, true);
+  r.copied = result.copied;
+  r.failures = result.failures;
+  return r;
+}
+
+// MEMORY is per-install state rather than shipped payload, but every active
+// top-level subsystem in MemorySystem.md's authoritative inventory must exist
+// before hooks run. Reserved directories remain absent until they are needed.
+const MEMORY_SUBDIRS = [
+  "KNOWLEDGE",
+  "WORK",
+  "LEARNING",
+  "WISDOM",
+  "RESEARCH",
+  "SECURITY",
+  "STATE",
+  "OBSERVABILITY",
+  "VOICE",
+  "RELATIONSHIP",
+  "VERIFICATION",
+  "TEAMS",
+  "SKILLS",
+  "SYSTEMUPDATES",
+  "PLANS",
+  "REFERENCE",
+  "BOOKMARKS",
+  "DATA",
+  "SCRATCHPAD",
+  "PROJECT",
+  "ARCHIVE",
+  "_AIRGRADIENT",
+  "_HELIOS",
+  "_NETWORK",
+  "PULSE_DATA",
+];
 
 /** (c) MEMORY scaffold: create the empty per-install state dirs (never overwrites). */
 function scaffoldMemory(configRoot: string, apply: boolean): DeployResult {
@@ -141,33 +226,112 @@ function scaffoldMemory(configRoot: string, apply: boolean): DeployResult {
 function deployDependencies(payloadInstall: string, configRoot: string, apply: boolean): DeployResult {
   const src = join(payloadInstall, "package.json");
   const dst = join(configRoot, "package.json");
+  const lockPath = join(configRoot, "bun.lock");
+  const modulesPath = join(configRoot, "node_modules");
   const r: DeployResult = { what: "dependencies", src, dst, present: existsSync(src), copied: 0, actions: [], blockers: [], failures: [] };
   if (!r.present) {
     r.blockers.push(`dependency manifest missing: ${src} — point --skill-root at a staged release`);
     return r;
   }
-  if (!apply) {
-    r.actions.push(`copyMissing ${src} → ${dst}`, `bun install --cwd ${configRoot}`);
+
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value);
+  let shipped: Record<string, unknown>;
+  let current: Record<string, unknown> = {};
+  const originalPackage = existsSync(dst) ? readFileSync(dst, "utf8") : null;
+  try {
+    const shippedValue: unknown = JSON.parse(readFileSync(src, "utf8"));
+    const currentValue: unknown = originalPackage === null ? {} : JSON.parse(originalPackage);
+    if (!isRecord(shippedValue)) throw new Error("shipped package.json must contain a JSON object");
+    if (!isRecord(currentValue)) throw new Error("existing package.json must contain a JSON object");
+    shipped = shippedValue;
+    current = currentValue;
+  } catch (error) {
+    r.blockers.push(`dependency manifest is invalid: ${error instanceof Error ? error.message : String(error)}`);
     return r;
   }
-  const { copied, failures } = copyMissing(src, dst);
-  r.copied = copied;
-  r.failures = failures;
-  if (failures.length === 0) {
-    const proc = Bun.spawnSync(["bun", "install"], { cwd: configRoot, stdout: "pipe", stderr: "pipe" });
-    if (proc.exitCode !== 0) {
-      r.failures.push(`bun install --cwd ${configRoot} exited ${proc.exitCode}: ${proc.stderr.toString().trim()}`);
-    } else {
-      r.actions.push(`bun install --cwd ${configRoot}`);
+
+  const requiredValue = shipped.dependencies;
+  const existingValue = current.dependencies;
+  if (requiredValue !== undefined && !isRecord(requiredValue)) {
+    r.blockers.push("shipped package.json dependencies must be a JSON object");
+    return r;
+  }
+  if (existingValue !== undefined && !isRecord(existingValue)) {
+    r.blockers.push("existing package.json dependencies must be a JSON object");
+    return r;
+  }
+  const required = requiredValue ?? {};
+  const existing = existingValue ?? {};
+  const added = Object.keys(required).filter((name) => !(name in existing));
+  const merged = {
+    ...current,
+    ...(originalPackage === null ? shipped : {}),
+    dependencies: { ...required, ...existing },
+  };
+  const needsWrite = originalPackage === null || added.length > 0;
+  const needsInstall = needsWrite || !existsSync(modulesPath);
+
+  if (!apply) {
+    r.actions.push(`merge required dependencies into ${dst}: ${added.length > 0 ? added.join(", ") : "already present"}`);
+    if (needsInstall) r.actions.push(`bun install --cwd ${configRoot}`);
+    return r;
+  }
+  if (!needsInstall) {
+    r.actions.push("dependencies already installed");
+    return r;
+  }
+
+  const backupDir = join(configRoot, `.lifeos-deps-backup-${process.pid}-${Date.now()}`);
+  const restore = (): void => {
+    rmSync(dst, { force: true });
+    rmSync(lockPath, { force: true });
+    rmSync(modulesPath, { recursive: true, force: true });
+    const packageBackup = join(backupDir, "package.json");
+    const lockBackup = join(backupDir, "bun.lock");
+    const modulesBackup = join(backupDir, "node_modules");
+    if (existsSync(packageBackup)) copyFileSync(packageBackup, dst);
+    if (existsSync(lockBackup)) copyFileSync(lockBackup, lockPath);
+    if (existsSync(modulesBackup)) cpSync(modulesBackup, modulesPath, { recursive: true });
+  };
+
+  let snapshotReady = false;
+  try {
+    mkdirSync(configRoot, { recursive: true });
+    mkdirSync(backupDir, { recursive: true });
+    if (existsSync(dst)) copyFileSync(dst, join(backupDir, "package.json"));
+    if (existsSync(lockPath)) copyFileSync(lockPath, join(backupDir, "bun.lock"));
+    if (existsSync(modulesPath)) cpSync(modulesPath, join(backupDir, "node_modules"), { recursive: true });
+    snapshotReady = true;
+    if (needsWrite) {
+      writeFileSync(dst, JSON.stringify(merged, null, 2) + "\n");
+      r.copied = added.length || 1;
     }
+
+    const bun = Bun.which("bun") || process.execPath;
+    const proc = Bun.spawnSync([bun, "install"], { cwd: configRoot, stdout: "pipe", stderr: "pipe" });
+    if (proc.exitCode !== 0) throw new Error(`bun install --cwd ${configRoot} exited ${proc.exitCode}`);
+    r.actions.push(`bun install --cwd ${configRoot}`);
+  } catch (error) {
+    if (snapshotReady) {
+      try {
+        restore();
+      } catch (rollbackError) {
+        r.failures.push(`dependency rollback failed: ${rollbackError instanceof Error ? rollbackError.message : String(rollbackError)}`);
+      }
+    }
+    r.failures.push(error instanceof Error ? error.message : String(error));
+  } finally {
+    rmSync(backupDir, { recursive: true, force: true });
   }
   return r;
 }
 
+
 function main(): void {
   const a = process.argv.slice(2);
   const home = process.env.HOME || homedir();
-  const configRoot = arg(a, "--config-root") || process.env.CLAUDE_CONFIG_DIR || join(home, ".claude");
+  const configRoot = arg(a, "--config-root") || defaultConfigRoot(home);
   const skillRoot = arg(a, "--skill-root") || join(import.meta.dir, "..");
   const payloadInstall = join(skillRoot, "install");
   const apply = a.includes("--apply");
@@ -185,6 +349,7 @@ function main(): void {
   const results = [
     deploySkills(payloadInstall, configRoot, apply),
     deployRuntime(payloadInstall, configRoot, apply),
+    deployHookPrerequisites(payloadInstall, configRoot, apply),
     scaffoldMemory(configRoot, apply),
     deployDependencies(payloadInstall, configRoot, apply),
   ];

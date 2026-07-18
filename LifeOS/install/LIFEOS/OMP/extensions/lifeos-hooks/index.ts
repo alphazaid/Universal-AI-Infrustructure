@@ -38,10 +38,11 @@
  * the constitution's ONE unified format (upstream 7.0.0 retired the mode system).
  */
 
+import { randomUUID } from "node:crypto";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
-import { spawn } from "node:child_process";
+import { basename, join } from "node:path";
+import { spawn, type ChildProcess } from "node:child_process";
 
 type OmpEvent =
 	| "session_start"
@@ -73,7 +74,11 @@ interface HookOutcome {
 interface ExtensionCtx {
 	hasUI?: boolean;
 	cwd?: string;
-	sessionManager?: { getBranch?: () => unknown[]; getSessionFile?: () => string | undefined };
+	sessionManager?: {
+		getBranch?: () => unknown[];
+		getSessionFile?: () => string | undefined;
+		getSessionId?: () => string | undefined;
+	};
 	ui?: { notify?: (message: string, level?: string) => void; setWorkingMessage?: (message?: string) => void };
 }
 
@@ -83,10 +88,11 @@ interface ExtensionApi {
 }
 
 const HOME = homedir();
-const CLAUDE_ROOT = join(HOME, ".claude");
-const HOOKS_DIR = join(CLAUDE_ROOT, "hooks");
-const LIFEOS_DIR = process.env.LIFEOS_DIR ?? join(CLAUDE_ROOT, "LIFEOS");
-const BUN = existsSync(join(HOME, ".bun/bin/bun")) ? join(HOME, ".bun/bin/bun") : "bun";
+const CONFIG_ROOT = process.env.LIFEOS_CONFIG_ROOT || process.env.CLAUDE_CONFIG_DIR || join(HOME, ".claude");
+const CLAUDE_ROOT = CONFIG_ROOT;
+const HOOKS_DIR = join(CONFIG_ROOT, "hooks");
+const LIFEOS_DIR = process.env.LIFEOS_DIR ?? join(CONFIG_ROOT, "LIFEOS");
+const BUN = typeof Bun !== "undefined" ? Bun.which("bun") || process.execPath : "bun";
 
 const TOOL_NAME_MAP: Record<string, string> = {
 	bash: "Bash",
@@ -140,8 +146,10 @@ const MANIFEST: HookSpec[] = [
 	// Format regime: ONE unified format per the constitution (upstream 7.0.0 retired the mode
 	// system entirely). StopGates' FormatGate (above) provides banner/format telemetry.
 ];
+export const REQUIRED_HOOK_FILES = MANIFEST.flatMap((spec) => spec.file ? [spec.file] : []);
 
 const firedOnce = new Set<string>();
+const fallbackSessionId = `omp-${randomUUID()}`;
 
 function isLikelySubagent(): boolean {
 	return Boolean(
@@ -156,14 +164,16 @@ function isLikelySubagent(): boolean {
 }
 
 let pulseUp: boolean | undefined;
+let pulseCheckedAt = 0;
 async function pulseAvailable(): Promise<boolean> {
-	if (pulseUp !== undefined) return pulseUp;
+	if (pulseUp === true || (pulseUp === false && Date.now() - pulseCheckedAt < 5000)) return pulseUp;
 	try {
 		const res = await fetch("http://localhost:31337/", { signal: AbortSignal.timeout(1000) });
 		pulseUp = res.status >= 200 && res.status < 400;
 	} catch {
 		pulseUp = false;
 	}
+	pulseCheckedAt = Date.now();
 	return pulseUp;
 }
 
@@ -214,6 +224,7 @@ async function runHttpHook(spec: HookSpec, ccStdin: Record<string, unknown>): Pr
 export function hookEnv(ctx: Pick<ExtensionCtx, "cwd">): Record<string, string | undefined> {
 	return {
 		...process.env,
+		LIFEOS_CONFIG_ROOT: CONFIG_ROOT,
 		LIFEOS_DIR,
 		LIFEOS_HARNESS: "omp",
 		CLAUDE_PROJECT_DIR: ctx.cwd ?? process.cwd(),
@@ -226,6 +237,29 @@ interface SpawnResult {
 	status: number | null;
 	stdout: string;
 	stderr: string;
+}
+
+export function launchFireAndForgetHook(
+	path: string,
+	input: string,
+	timeoutMs: number,
+	env: Record<string, string | undefined>,
+): ChildProcess {
+	const child = spawn(BUN, [path], { env, stdio: ["pipe", "ignore", "ignore"], detached: true });
+	child.stdin?.write(input);
+	child.stdin?.end();
+	const timer = setTimeout(() => {
+		try {
+			child.kill("SIGKILL");
+		} catch {
+			/* already dead */
+		}
+	}, timeoutMs);
+	timer.unref();
+	child.once("close", () => clearTimeout(timer));
+	child.once("error", () => clearTimeout(timer));
+	child.unref();
+	return child;
 }
 
 /**
@@ -293,10 +327,7 @@ async function runHook(spec: HookSpec, ccStdin: Record<string, unknown>, ctx: Ex
 	// these hooks write state files / observability, never additionalContext the model needs.
 	if (spec.fireAndForget) {
 		try {
-			const child = spawn(BUN, [path], { env: hookEnv(ctx), stdio: ["pipe", "ignore", "ignore"], detached: true });
-			child.stdin?.write(JSON.stringify(ccStdin));
-			child.stdin?.end();
-			child.unref();
+			launchFireAndForgetHook(path, JSON.stringify(ccStdin), spec.timeoutMs ?? 5000, hookEnv(ctx));
 		} catch {
 			/* fail-open */
 		}
@@ -310,13 +341,21 @@ async function runHook(spec: HookSpec, ccStdin: Record<string, unknown>, ctx: Ex
 	return out.startsWith("{") ? parseHookJson(out) : { additionalContext: out };
 }
 
+function sessionId(ctx: ExtensionCtx): string {
+	const explicit = ctx.sessionManager?.getSessionId?.();
+	if (typeof explicit === "string" && explicit.length > 0) return explicit;
+	const file = ctx.sessionManager?.getSessionFile?.();
+	if (typeof file === "string" && file.length > 0) return basename(file).replace(/\.[^.]+$/, "");
+	return fallbackSessionId;
+}
+
 function buildStdin(spec: HookSpec, extra: Record<string, unknown>, ctx: ExtensionCtx): Record<string, unknown> {
-	return { hook_event_name: spec.ccEvent, session_id: "omp", cwd: ctx.cwd ?? process.cwd(), ...extra };
+	return { hook_event_name: spec.ccEvent, session_id: sessionId(ctx), cwd: ctx.cwd ?? process.cwd(), ...extra };
 }
 
 function readField(value: unknown, key: string): unknown {
 	if (value !== null && typeof value === "object" && key in value) {
-		const record: Record<string, unknown> = value;
+		const record = value as Record<string, unknown>;
 		return record[key];
 	}
 	return undefined;

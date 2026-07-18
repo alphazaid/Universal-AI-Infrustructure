@@ -2,7 +2,7 @@
 // in LIFEOS_DIR/LIFEOS_CONFIG_DIR/PROJECTS_DIR resolves to a shadow dir (#1404 / PR #1451, author jbmml).
 for (const __k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
   const __v = process.env[__k];
-  if (__v && /^\$\{?HOME\}?(\/|$)/.test(__v)) process.env[__k] = __v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? "~");
+  if (__v && /^\$\{?HOME\}?(\/|$)/.test(__v)) process.env[__k] = __v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? homedir());
 }
 
 /**
@@ -30,14 +30,16 @@ for (const __k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
  */
 
 import { join, extname } from "path"
+import { homedir } from "os"
 import { readFileSync, readdirSync, existsSync, realpathSync, statSync, watch, type FSWatcher } from "fs"
 import YAML from "yaml"
+import { getLifeosConfigRoot, getLifeosDir } from "../../TOOLS/lib/paths"
 import { effortToCanonicalTierName } from "../../../hooks/lib/effort"
 
 // Normalize env path vars that Claude Code injects without shell expansion (LifeOS#1404)
 for (const k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
   const v = process.env[k];
-  if (v && /^\$\{?HOME\}?(\/|$)/.test(v)) process.env[k] = v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? "~");
+  if (v && /^\$\{?HOME\}?(\/|$)/.test(v)) process.env[k] = v.replace(/^\$\{?HOME\}?/, process.env.HOME ?? homedir());
 }
 
 // Growth is an OPTIONAL USER customization (USER/CUSTOMIZATIONS/TOOLS/Growth.ts): present on the
@@ -68,9 +70,11 @@ export interface ObservabilityConfig {
 
 // ── Path Construction ──
 
-const HOME = process.env.HOME ?? ""
-const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS")
+const HOME = process.env.HOME ?? homedir()
+const CONFIG_ROOT = getLifeosConfigRoot()
+const LIFEOS_DIR = getLifeosDir()
 const MEMORY_DIR = join(LIFEOS_DIR, "MEMORY")
+const PULSE_DIR = join(LIFEOS_DIR, "PULSE")
 
 const WORK_JSON_PATH = join(MEMORY_DIR, "STATE", "work.json")
 const NOVELTY_STATE_PATH = join(MEMORY_DIR, "STATE", "novelty-state.json")
@@ -78,10 +82,10 @@ const SUBAGENT_EVENTS_PATH = join(MEMORY_DIR, "OBSERVABILITY", "subagent-events.
 const VOICE_EVENTS_PATH = join(MEMORY_DIR, "VOICE", "voice-events.jsonl")
 const TOOL_FAILURES_PATH = join(MEMORY_DIR, "OBSERVABILITY", "tool-failures.jsonl")
 const TOOL_ACTIVITY_PATH = join(MEMORY_DIR, "OBSERVABILITY", "tool-activity.jsonl")
-const SETTINGS_PATH = join(HOME, ".claude", "settings.json")
+const SETTINGS_PATH = join(CONFIG_ROOT, "settings.json")
 const LADDER_DIR = join(HOME, "Projects", "Ladder")
 
-const DEFAULT_DASHBOARD_DIR = join(LIFEOS_DIR, "PULSE", "Observability", "out")
+const DEFAULT_DASHBOARD_DIR = join(PULSE_DIR, "Observability", "out")
 
 let moduleStartedAt: string | null = null
 
@@ -156,7 +160,7 @@ function getDashboardDir(): string {
   const dir = config.dashboard_dir ?? DEFAULT_DASHBOARD_DIR
   // Resolve relative paths against Pulse directory
   if (!dir.startsWith("/")) {
-    return join(HOME, ".claude", "LIFEOS", "PULSE", dir)
+    return join(PULSE_DIR, dir)
   }
   return dir
 }
@@ -1640,7 +1644,6 @@ function readDirMdFiles(dir: string): { name: string, content: string, sections:
 
 function handleUserIndexApi(filter: string | null): Response {
   try {
-    const LIFEOS_DIR = process.env.LIFEOS_DIR || join(process.env.HOME || "", ".claude", "LIFEOS")
     const indexPath = join(LIFEOS_DIR, "PULSE", "state", "user-index.json")
     const raw = Bun.file(indexPath)
     if (!raw.size) {

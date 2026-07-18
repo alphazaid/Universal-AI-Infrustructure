@@ -28,9 +28,10 @@
 
 import { existsSync, statSync, readdirSync, readFileSync } from "fs"
 import { join } from "path"
+import { getLifeosConfigRoot, getLifeosDir } from "../../TOOLS/lib/paths"
 
-const HOME = process.env.HOME ?? "~"
-const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS")
+const CONFIG_ROOT = getLifeosConfigRoot()
+const LIFEOS_DIR = getLifeosDir()
 const USER_DIR = join(LIFEOS_DIR, "USER")
 const TELOS_DIR = join(USER_DIR, "TELOS")
 
@@ -82,14 +83,14 @@ const REGISTRY: Record<string, SourceSpec[]> = {
     { name: "KNOWLEDGE/", path: join(LIFEOS_DIR, "MEMORY", "KNOWLEDGE"), expand: true },
   ],
   hooks: [
-    { name: "hooks/", path: join(HOME, ".claude", "hooks"), expand: true },
-    { name: "settings.json", path: join(HOME, ".claude", "settings.json") },
+    { name: "hooks/", path: join(CONFIG_ROOT, "hooks"), expand: true },
+    { name: "settings.json", path: join(CONFIG_ROOT, "settings.json") },
   ],
   skills: [
-    { name: "skills/", path: join(HOME, ".claude", "skills"), expand: true },
+    { name: "skills/", path: join(CONFIG_ROOT, "skills"), expand: true },
   ],
   agents: [
-    { name: "agents/", path: join(HOME, ".claude", "agents"), expand: true },
+    { name: "agents/", path: join(CONFIG_ROOT, "agents"), expand: true },
   ],
   docs: [
     { name: "DOCUMENTATION/", path: join(LIFEOS_DIR, "DOCUMENTATION"), expand: true },
@@ -105,7 +106,7 @@ const REGISTRY: Record<string, SourceSpec[]> = {
   ],
   amber: [
     { name: "KNOWLEDGE/Ideas/", path: join(LIFEOS_DIR, "MEMORY", "KNOWLEDGE", "Ideas"), expand: true },
-    { name: "_X/State/", path: join(HOME, ".claude", "skills", "_X", "State") },
+    { name: "_X/State/", path: join(CONFIG_ROOT, "skills", "_X", "State") },
   ],
   assistant: [
     { name: "DA_IDENTITY.md", path: join(USER_DIR, "DIGITAL_ASSISTANT", "DA_IDENTITY.md") },

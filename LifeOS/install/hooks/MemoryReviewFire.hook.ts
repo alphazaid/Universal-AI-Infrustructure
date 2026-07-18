@@ -26,11 +26,12 @@ import { spawn } from "node:child_process";
 import { dirname, resolve as pathResolve } from "node:path";
 import { homedir } from "node:os";
 
-const CLAUDE_ROOT = pathResolve(homedir(), ".claude");
-const STATE_PATH = pathResolve(CLAUDE_ROOT, "LIFEOS/MEMORY/OBSERVABILITY/review-state.json");
-const CONFIG_PATH = pathResolve(CLAUDE_ROOT, "LIFEOS/USER/CONFIG/memory-review.json");
-const FIRE_LOG_PATH = pathResolve(CLAUDE_ROOT, "LIFEOS/MEMORY/OBSERVABILITY/reviewer-fires.jsonl");
-const REVIEWER_PATH = pathResolve(CLAUDE_ROOT, "LIFEOS/TOOLS/MemoryReviewer.ts");
+const CONFIG_ROOT = process.env.LIFEOS_CONFIG_ROOT || process.env.CLAUDE_CONFIG_DIR || pathResolve(homedir(), ".claude");
+const LIFEOS_DIR = process.env.LIFEOS_DIR || pathResolve(CONFIG_ROOT, "LIFEOS");
+const STATE_PATH = pathResolve(LIFEOS_DIR, "MEMORY/OBSERVABILITY/review-state.json");
+const CONFIG_PATH = pathResolve(LIFEOS_DIR, "USER/CONFIG/memory-review.json");
+const FIRE_LOG_PATH = pathResolve(LIFEOS_DIR, "MEMORY/OBSERVABILITY/reviewer-fires.jsonl");
+const REVIEWER_PATH = pathResolve(LIFEOS_DIR, "TOOLS/MemoryReviewer.ts");
 
 interface ReviewState {
   turn_count_since_last_review: number;
@@ -107,7 +108,17 @@ function logFire(payload: Record<string, unknown>): void {
   } catch { /* best-effort */ }
 }
 
-function spawnReviewer(turnsReviewed: number): { spawned: boolean; reason: string } {
+function transcriptPathFromStdin(): string | undefined {
+  try {
+    const input = JSON.parse(readFileSync(0, "utf8")) as Record<string, unknown>;
+    const path = input.transcript_path;
+    return typeof path === "string" && path.length > 0 && existsSync(path) ? path : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function spawnReviewer(turnsReviewed: number, transcriptPath?: string): { spawned: boolean; reason: string } {
   if (!existsSync(REVIEWER_PATH)) {
     return { spawned: false, reason: "reviewer-not-found" };
   }
@@ -116,7 +127,9 @@ function spawnReviewer(turnsReviewed: number): { spawned: boolean; reason: strin
     delete env.ANTHROPIC_API_KEY;
     delete env.ANTHROPIC_AUTH_TOKEN;
     delete env.CLAUDECODE;
-    const proc = spawn("bun", [REVIEWER_PATH, "review", "--turns", String(turnsReviewed)], {
+    const args = [REVIEWER_PATH, "review", "--turns", String(turnsReviewed)];
+    if (transcriptPath) args.push("--input", transcriptPath);
+    const proc = spawn(Bun.which("bun") || process.execPath, args, {
       env,
       stdio: "ignore",
       detached: true,
@@ -135,6 +148,7 @@ function main(): void {
     const nowMs = Date.now();
     const now = new Date(nowMs).toISOString();
     const config = loadConfig();
+    const transcriptPath = transcriptPathFromStdin();
     const state = loadState();
 
     state.turn_count_since_last_review += 1;
@@ -146,7 +160,7 @@ function main(): void {
 
     if (due) {
       const turnsReviewed = state.turn_count_since_last_review;
-      const { spawned, reason } = spawnReviewer(turnsReviewed);
+      const { spawned, reason } = spawnReviewer(turnsReviewed, transcriptPath);
       logFire({ ts: now, turns_since_last_review: turnsReviewed, spawned, reason });
       state.turn_count_since_last_review = 0;
       state.last_review_at = now;

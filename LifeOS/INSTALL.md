@@ -14,10 +14,18 @@ Paste this to your AI — Claude Code, Cursor, Cline, Codex, Gemini CLI, or any 
 
 That's the primary path. Your AI reads the rest of this page and installs LifeOS for you.
 
-Prefer a terminal? There's a shell shortcut for Claude Code on macOS/Linux:
+Prefer a terminal? Use the platform bootstrap:
+
+**macOS / Linux**
 
 ```
 curl -fsSL https://ourlifeos.ai/install.sh | bash
+```
+
+**Windows PowerShell**
+
+```powershell
+irm https://ourlifeos.ai/install.ps1 | iex
 ```
 
 Everything below is written for the AI doing the install.

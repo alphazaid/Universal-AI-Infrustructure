@@ -75,7 +75,7 @@ enabled = true
 [syslog]
 enabled = true
 port = 5514
-# Captures UniFi syslog to ~/.claude/LIFEOS/MEMORY/OBSERVABILITY/unifi-syslog.jsonl.
+# Captures UniFi syslog to the selected LIFEOS_DIR/MEMORY/OBSERVABILITY/unifi-syslog.jsonl.
 # See _NETWORK/Workflows/CaptureLogs.md for controller-side setup.
 
 [local_intelligence]
@@ -139,7 +139,7 @@ enabled = true
 name = "memory-consolidation"
 schedule = "0 3 * * *"
 type = "claude"
-prompt = "Run learning consolidation: execute `bun run ~/.claude/LIFEOS/TOOLS/SessionHarvester.ts --recent 20` then `bun run ~/.claude/LIFEOS/TOOLS/LearningPatternSynthesis.ts --week`. Summarize what was learned and any patterns found."
+prompt = "Run learning consolidation: execute `bun run \"$LIFEOS_DIR/TOOLS/SessionHarvester.ts\" --recent 20` then `bun run \"$LIFEOS_DIR/TOOLS/LearningPatternSynthesis.ts\" --week`. Summarize what was learned and any patterns found."
 model = "sonnet"
 output = "log"
 enabled = true

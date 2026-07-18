@@ -16,12 +16,12 @@
 import { existsSync, readFileSync, statSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import { getLifeosDir } from "../../TOOLS/lib/paths"
 
 const MODULE_NAME = "menubar"
 const state = { running: false, startedAt: null as Date | null }
 
-const CLAUDE = join(homedir(), ".claude")
-const LIFEOS = join(CLAUDE, "LIFEOS")
+const LIFEOS = getLifeosDir()
 const OBS = join(LIFEOS, "MEMORY", "OBSERVABILITY")
 const STATE_DIR = join(LIFEOS, "PULSE", "state")
 const WORK_JSON = join(LIFEOS, "MEMORY", "STATE", "work.json")

@@ -3,7 +3,7 @@
  * Cost Aggregator — scans Claude Code session JSONLs for token usage data
  * and computes per-session costs.
  *
- * Data source: ~/.claude/projects/{project}/{uuid}.jsonl
+ * Data source: selected config root/projects/{project}/{uuid}.jsonl
  * Output: MEMORY/OBSERVABILITY/session-costs.jsonl
  *
  * Runs incrementally: tracks last scan time, only processes new/modified files.
@@ -12,10 +12,10 @@
 
 import { join, basename, dirname } from "path"
 import { existsSync, readFileSync, writeFileSync, appendFileSync, readdirSync, statSync, mkdirSync } from "fs"
+import { getLifeosConfigRoot, getLifeosDir } from "../../TOOLS/lib/paths.ts"
 
-const HOME = process.env.HOME ?? ""
-const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS")
-const PROJECTS_DIR = join(HOME, ".claude", "projects")
+const LIFEOS_DIR = getLifeosDir()
+const PROJECTS_DIR = join(getLifeosConfigRoot(), "projects")
 const OUTPUT_FILE = join(LIFEOS_DIR, "MEMORY", "OBSERVABILITY", "session-costs.jsonl")
 const STATE_FILE = join(LIFEOS_DIR, "PULSE", "Performance", "aggregator-state.json")
 

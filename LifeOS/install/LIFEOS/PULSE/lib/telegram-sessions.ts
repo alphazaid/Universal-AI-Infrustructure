@@ -17,9 +17,9 @@
 import { Database } from "bun:sqlite"
 import { join } from "path"
 import { mkdirSync } from "fs"
+import { getLifeosDir } from "../../TOOLS/lib/paths"
 
-const HOME = process.env.HOME ?? ""
-const DB_DIR = join(HOME, ".claude", "LIFEOS", "PULSE", "state", "telegram")
+const DB_DIR = join(getLifeosDir(), "PULSE", "state", "telegram")
 const DB_PATH = join(DB_DIR, "sessions.db")
 
 // Compaction threshold — after this many turns, we'll compact the session

@@ -6,11 +6,11 @@
  * Route: GET /api/books → { count, lastUpdated, groups: [{ category, books:[…] }] }
  */
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getLifeosDir } from "../../TOOLS/lib/paths";
 
 const MODULE_NAME = "books";
-const BOOKS_PATH = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"), "LIFEOS", "USER", "BOOKS.md");
+const BOOKS_PATH = join(getLifeosDir(), "USER", "BOOKS.md");
 const state = { running: false };
 
 interface Book {

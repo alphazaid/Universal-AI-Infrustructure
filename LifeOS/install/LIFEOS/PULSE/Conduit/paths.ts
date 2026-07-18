@@ -6,14 +6,14 @@
  * that invariant is enforced in one spot. Code lives in LIFEOS/PULSE/Conduit/;
  * data lives in LIFEOS/USER/CONDUIT/.
  */
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getLifeosConfigRoot, getLifeosDir } from "../../TOOLS/lib/paths";
 
-/** LifeOS install root — honors CLAUDE_CONFIG_DIR, else ~/.claude. */
-export const CLAUDE_ROOT = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+/** Selected configuration root. Retained as a public export for existing consumers. */
+export const CLAUDE_ROOT = getLifeosConfigRoot();
 
 /** All Conduit data lives here, under USER. Nothing Conduit writes escapes this dir. */
-export const DATA_ROOT = join(CLAUDE_ROOT, "LIFEOS", "USER", "CONDUIT");
+export const DATA_ROOT = join(getLifeosDir(), "USER", "CONDUIT");
 
 export const EVENTS_DIR = join(DATA_ROOT, "events");
 export const DAILY_DIR = join(DATA_ROOT, "daily");

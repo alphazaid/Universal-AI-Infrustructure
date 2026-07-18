@@ -11,12 +11,11 @@
  * Route: GET /api/doctor → { manifest, heartbeat, reconcile }
  */
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getLifeosDir } from "../../TOOLS/lib/paths";
 
 const MODULE_NAME = "doctor";
-const CONFIG_ROOT = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
-const LIFEOS_DIR = join(CONFIG_ROOT, "LIFEOS");
+const LIFEOS_DIR = getLifeosDir();
 const STATE_DIR = join(LIFEOS_DIR, "MEMORY", "STATE");
 const MANIFEST_PATH = join(STATE_DIR, "capabilities.json");
 const HEARTBEAT_PATH = join(STATE_DIR, "doctor-heartbeat.json");

@@ -28,10 +28,12 @@ import { join, basename } from "path";
 // Configuration
 // ============================================================================
 
-const CLAUDE_DIR = join(homedir(), ".claude");
-const MCP_DIR = join(CLAUDE_DIR, "MCPs");
-const ACTIVE_MCP = join(CLAUDE_DIR, ".mcp.json");
-const BANNER_SCRIPT = join(homedir(), ".claude", "LIFEOS", "TOOLS", "Banner.ts");
+const CONFIG_ROOT = process.env.LIFEOS_CONFIG_ROOT || process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
+const LIFEOS_DIR = process.env.LIFEOS_DIR || join(CONFIG_ROOT, "LIFEOS");
+const CLAUDE_DIR = CONFIG_ROOT;
+const MCP_DIR = join(CONFIG_ROOT, "MCPs");
+const ACTIVE_MCP = join(CONFIG_ROOT, ".mcp.json");
+const BANNER_SCRIPT = join(LIFEOS_DIR, "TOOLS", "Banner.ts");
 const VOICE_SERVER = "http://localhost:31337/notify/personality";
 const WALLPAPER_DIR = join(homedir(), "Projects", "Wallpaper");
 // Note: RAW archiving removed - Claude Code handles its own cleanup (30-day retention in projects/)
@@ -409,7 +411,7 @@ async function cmdLaunch(options: { mcp?: string; resume?: boolean; resumeId?: s
 
   // LifeOS System Prompt — constitutional rules appended to Claude Code's system prompt
   // These rules get highest instruction authority (system prompt layer > CLAUDE.md layer)
-  const systemPromptFile = options.systemPrompt ?? join(CLAUDE_DIR, "LIFEOS", "LIFEOS_SYSTEM_PROMPT.md");
+  const systemPromptFile = options.systemPrompt ?? join(LIFEOS_DIR, "LIFEOS_SYSTEM_PROMPT.md");
   if (existsSync(systemPromptFile)) {
     args.push("--append-system-prompt-file", systemPromptFile);
   }
@@ -590,7 +592,7 @@ async function cmdPrompt(prompt: string) {
 
   // Same constitutional layer as interactive launches — without this, one-shots
   // ran bare Claude Code (CLAUDE.md only, no output format, no security protocol).
-  const systemPromptFile = join(CLAUDE_DIR, "LIFEOS", "LIFEOS_SYSTEM_PROMPT.md");
+  const systemPromptFile = join(LIFEOS_DIR, "LIFEOS_SYSTEM_PROMPT.md");
   if (existsSync(systemPromptFile)) {
     args.push("--append-system-prompt-file", systemPromptFile);
   }

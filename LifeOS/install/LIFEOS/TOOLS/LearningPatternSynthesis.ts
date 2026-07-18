@@ -26,13 +26,13 @@ import { parseArgs } from "util";
 import * as fs from "fs";
 import * as path from "path";
 import * as crypto from "crypto";
+import { getLifeosDir } from "./lib/paths.ts";
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-const CLAUDE_DIR = path.join(process.env.HOME!, ".claude");
-const LIFEOS_DIR = path.join(CLAUDE_DIR, "LIFEOS");
+const LIFEOS_DIR = getLifeosDir();
 const MEMORY_DIR = path.join(LIFEOS_DIR, "MEMORY");
 const LEARNING_DIR = path.join(MEMORY_DIR, "LEARNING");
 const RATINGS_FILE = path.join(LEARNING_DIR, "SIGNALS", "ratings.jsonl");

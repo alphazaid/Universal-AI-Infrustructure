@@ -18,6 +18,7 @@ import { join, resolve, sep } from "path"
 import { appendFile, mkdir, readFile, rm, stat as statFile, unlink, writeFile } from "fs/promises"
 import { inference } from "../../TOOLS/Inference"
 import { loadLifeosConfig } from "../../TOOLS/LifeosConfig"
+import { getLifeosConfigRoot, getLifeosDir } from "../../TOOLS/lib/paths"
 import { read as readMemory, type ReadResult as MemoryReadResult } from "../../TOOLS/MemoryWriter"
 import { getRelevantContext } from "../../TOOLS/MemoryRetriever"
 import {
@@ -67,9 +68,11 @@ export interface TelegramConfig {
 // ── Constants ──
 
 const HOME = process.env.HOME ?? ""
-const CWD = join(HOME, ".claude")
-const STATE_DIR = join(HOME, ".claude", "LIFEOS", "PULSE", "state", "telegram")
-const LOGS_DIR = join(HOME, ".claude", "LIFEOS", "PULSE", "logs", "telegram")
+const CONFIG_ROOT = getLifeosConfigRoot()
+const LIFEOS_DIR = getLifeosDir()
+const CWD = CONFIG_ROOT
+const STATE_DIR = join(LIFEOS_DIR, "PULSE", "state", "telegram")
+const LOGS_DIR = join(LIFEOS_DIR, "PULSE", "logs", "telegram")
 const STALE_ACK_CACHE_DIR = join(STATE_DIR, "ack-cache")
 const MAX_TELEGRAM_LENGTH = 4096
 const CURSOR = " ▌"
@@ -80,7 +83,6 @@ const IDLE_TIMEOUT_MS = 60 * 60 * 1000          // 1 hour — gap of silence tha
 const INFERENCE_HARD_BUDGET_MS = 10_000         // outer race cap on summarize; measured Sonnet subprocess cost is 4-6s, this gives slack without losing the voice trailing the text by too much
 const MIN_FALLBACK_WORDS = 6                    // a fallback summary shorter than this is presumed too thin to be worth voicing
 const MEANINGFUL_REPLY_WORDS = 25               // when a reply is at least this long, a too-short fallback is a regression — skip voice rather than ship a "0:00" stub
-const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS")
 
 // ── Bidirectional Telegram images (ported from public PR #1384, @klausagnoletti) ──
 //
@@ -986,7 +988,13 @@ export async function startTelegram(config: TelegramConfig): Promise<void> {
         // voice for this turn is delivered via bot.api.sendVoice below
         // (sendVoiceSummary fire-and-forget).
         // Source of truth: hooks/lib/notification-channel.ts.
-        env: { ...process.env, LIFEOS_NOTIFICATION_CHANNEL: "telegram" },
+        env: {
+          ...process.env,
+          CLAUDE_CONFIG_DIR: CONFIG_ROOT,
+          LIFEOS_CONFIG_ROOT: CONFIG_ROOT,
+          LIFEOS_DIR,
+          LIFEOS_NOTIFICATION_CHANNEL: "telegram",
+        },
         // Hard-block /notify via canUseTool callback. Bash calls containing
         // "31337" or "/notify" are denied at the SDK permission boundary.
         // This is a belt-and-suspenders backup to the env-var channel gate

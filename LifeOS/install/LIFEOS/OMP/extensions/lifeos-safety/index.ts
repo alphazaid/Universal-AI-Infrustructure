@@ -49,7 +49,7 @@ const EXTERNAL_WARNING =
 
 function readField(value: unknown, key: string): unknown {
 	if (value !== null && typeof value === "object" && key in value) {
-		const record: Record<string, unknown> = value;
+		const record = value as Record<string, unknown>;
 		return record[key];
 	}
 	return undefined;

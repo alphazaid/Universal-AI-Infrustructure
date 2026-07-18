@@ -5,9 +5,10 @@
  */
 import { join } from "path"
 import { readFileSync } from "fs"
+import { getLifeosConfigRoot, getLifeosDir } from "../TOOLS/lib/paths.ts"
 
 // Load .env
-const envPath = join(process.env.HOME ?? "~", ".claude", ".env")
+const envPath = join(getLifeosConfigRoot(), ".env")
 try {
   const envContent = readFileSync(envPath, "utf-8")
   for (const line of envContent.split("\n")) {
@@ -23,7 +24,12 @@ try {
   }
 } catch {}
 
-import { loadConfig, spawnClaude, spawnScript, dispatch, isSentinel, log } from "./lib"
+const CONFIG_ROOT = getLifeosConfigRoot()
+const LIFEOS_DIR = getLifeosDir()
+process.env.LIFEOS_CONFIG_ROOT ??= CONFIG_ROOT
+process.env.LIFEOS_DIR ??= LIFEOS_DIR
+
+const { loadConfig, spawnClaude, spawnScript, dispatch, isSentinel, log } = await import("./lib")
 
 const jobName = process.argv[2]
 if (!jobName) {
@@ -31,7 +37,7 @@ if (!jobName) {
   process.exit(1)
 }
 
-const PULSE_DIR = join(process.env.HOME ?? "~", ".claude", "LIFEOS", "PULSE")
+const PULSE_DIR = join(LIFEOS_DIR, "PULSE")
 const config = await loadConfig(PULSE_DIR)
 const job = config.jobs.find((j) => j.name === jobName)
 if (!job) {

@@ -50,15 +50,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, resolve as pathResolve } from "node:path";
-import { homedir } from "node:os";
+import { getLifeosDir } from "./lib/paths";
 
 // ── Constants ──
 
-const CLAUDE_ROOT = pathResolve(homedir(), ".claude");
+const LIFEOS_DIR = getLifeosDir();
 
 const ALLOWED_FILES = new Set<string>([
-  pathResolve(CLAUDE_ROOT, "LIFEOS/USER/PRINCIPAL/PRINCIPAL_MEMORY.md"),
-  pathResolve(CLAUDE_ROOT, "LIFEOS/USER/DIGITAL_ASSISTANT/DA_MEMORY.md"),
+  pathResolve(LIFEOS_DIR, "USER/PRINCIPAL/PRINCIPAL_MEMORY.md"),
+  pathResolve(LIFEOS_DIR, "USER/DIGITAL_ASSISTANT/DA_MEMORY.md"),
 ]);
 
 const PREFIX_PATTERN = /^(NAME|ROLE|RELATION|PREFERENCE|RULE): /;
@@ -69,8 +69,8 @@ const BEGIN_MARKER = "<!-- BEGIN ENTRIES -->";
 const END_MARKER = "<!-- END ENTRIES -->";
 
 const OBSERVABILITY_PATH = pathResolve(
-  CLAUDE_ROOT,
-  "LIFEOS/MEMORY/OBSERVABILITY/memory-writes.jsonl",
+  LIFEOS_DIR,
+  "MEMORY/OBSERVABILITY/memory-writes.jsonl",
 );
 
 // ── Types ──
@@ -347,7 +347,7 @@ function withLock<T>(filePath: string, action: () => T): T | SetEntriesErrLock |
 // overwriting. set-overwrite has a "wipe the whole file" blast radius; git only
 // covers between commits. This makes every individual autonomic write reversible
 // via `MemoryRestore.ts`. Cheap: one file copy of <13KB, capped at 30 per file.
-const SNAPSHOT_DIR = pathResolve(CLAUDE_ROOT, "LIFEOS/MEMORY/OBSERVABILITY/memory-snapshots");
+const SNAPSHOT_DIR = pathResolve(LIFEOS_DIR, "MEMORY/OBSERVABILITY/memory-snapshots");
 const SNAPSHOT_RING = 30;
 
 function snapshotBeforeWrite(absPath: string, priorContent: string): void {
@@ -402,7 +402,7 @@ function logWriteEvent(
     mkdirSync(dirname(OBSERVABILITY_PATH), { recursive: true });
     const row = JSON.stringify({
       ts: new Date().toISOString(),
-      file: filePath.replace(CLAUDE_ROOT + "/", ""),
+      file: filePath.replace(LIFEOS_DIR + "/", "LIFEOS/"),
       updated_by: updatedBy ?? "unknown",
       prior_count: result.prior_count,
       new_count: result.new_count,
@@ -555,7 +555,7 @@ export function read(filePath: string): ReadResult | SetEntriesErrPath {
 
 function smokeTest(): number {
   console.log("MemoryWriter smoke test starting…");
-  const testFile = pathResolve(CLAUDE_ROOT, "LIFEOS/USER/PRINCIPAL/PRINCIPAL_MEMORY.md");
+  const testFile = pathResolve(LIFEOS_DIR, "USER/PRINCIPAL/PRINCIPAL_MEMORY.md");
   const writer = "smoke-test";
 
   // 1. Read initial state (should be empty)

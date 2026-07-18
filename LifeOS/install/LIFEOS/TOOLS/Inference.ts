@@ -47,6 +47,7 @@ import { spawn } from "child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
+import { getLifeosDir } from "./lib/paths";
 
 /**
  * Resolve the claude binary explicitly. launchd jobs run with a minimal PATH
@@ -85,7 +86,7 @@ export function normalizeLevel(level: string | undefined): InferenceLevel {
 
 export type InferenceBackend = 'claude' | 'omp' | 'auto';
 
-const BACKEND_CONFIG_PATH = join(homedir(), '.claude', 'LIFEOS', 'USER', 'CONFIG', 'inference-backend');
+const BACKEND_CONFIG_PATH = join(getLifeosDir(), 'USER', 'CONFIG', 'inference-backend');
 const VALID_BACKENDS: readonly InferenceBackend[] = ['claude', 'omp', 'auto'] as const;
 
 export function resolveBackend(): InferenceBackend {
@@ -225,7 +226,7 @@ export function verifyExecutedModel(modelUsage: unknown, expectedTier: string): 
  * exact drift this catches and makes auditable. Logging must never break inference. */
 function logModelVerification(entry: Record<string, unknown>): void {
   try {
-    const dir = join(process.env.HOME || '', '.claude', 'LIFEOS', 'MEMORY', 'OBSERVABILITY');
+    const dir = join(getLifeosDir(), 'MEMORY', 'OBSERVABILITY');
     mkdirSync(dir, { recursive: true });
     appendFileSync(join(dir, 'model-verification.jsonl'), JSON.stringify({ ts: new Date().toISOString(), ...entry }) + '\n');
   } catch { /* observability must never break inference */ }

@@ -6,6 +6,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 HOME_DIR="$HOME"
+LIFEOS_ROOT="${LIFEOS_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-$(dirname "$LIFEOS_ROOT")}"
 APP_NAME="LifeOS Pulse"
 APP_DIR="$HOME_DIR/Applications"
 APP_DEST="$APP_DIR/$APP_NAME.app"
@@ -63,12 +65,12 @@ echo "  Installed $APP_DEST"
 # Step 6: Install and load launchd plist
 echo "[6/6] Installing LaunchAgent..."
 
-# Substitute __HOME__ placeholder with actual home directory
-sed "s|__HOME__|$HOME_DIR|g" "$PLIST_SRC" > "$PLIST_DST"
+# Substitute profile placeholders with the selected LifeOS install roots.
+sed -e "s|__HOME__/.claude/LIFEOS|$LIFEOS_ROOT|g" -e "s|__HOME__/.claude|$CONFIG_ROOT|g" -e "s|__HOME__|$HOME_DIR|g" "$PLIST_SRC" > "$PLIST_DST"
 echo "  Installed $PLIST_DST"
 
 # Ensure logs directory exists
-mkdir -p "$HOME_DIR/.claude/LIFEOS/PULSE/logs"
+mkdir -p "$LIFEOS_ROOT/PULSE/logs"
 
 launchctl load "$PLIST_DST"
 echo "  Loaded $PLIST_LABEL"

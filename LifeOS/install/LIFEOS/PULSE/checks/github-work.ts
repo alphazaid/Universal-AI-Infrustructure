@@ -12,9 +12,10 @@ import { join } from "path"
 import { readFileSync } from "fs"
 import { parse } from "smol-toml"
 import { SignJWT, importPKCS8 } from "jose"
+import { getLifeosDir, homeDir } from "../../TOOLS/lib/paths"
 
-const HOME = process.env.HOME ?? ""
-const PULSE_DIR = join(HOME, ".claude", "LIFEOS", "PULSE")
+const HOME = homeDir()
+const PULSE_DIR = join(getLifeosDir(), "PULSE")
 const STATE_FILE = join(PULSE_DIR, "state", "work-token.json")
 
 // ── Worker Config (from PULSE.toml [worker] section) ──
@@ -277,17 +278,17 @@ async function executeWork(issue: Issue, config: WorkerConfig): Promise<{ output
   ].join("\n")
 
   const claudePath = Bun.which("claude") ?? join(HOME, ".local", "bin", "claude")
-  // BILLING: subscription, not API. Remove --bare (forces ANTHROPIC_API_KEY),
-  // strip the key from inherited env (bun auto-loads .env). See
-  // feedback_claude_bare_flag_forces_api_billing.md.
+  // BILLING: subscription, not API. Remove --bare and inherited API/auth
+  // credentials so Claude uses the configured subscription OAuth flow.
   const env: Record<string, string> = { ...process.env } as Record<string, string>
   delete env.ANTHROPIC_API_KEY
+  delete env.ANTHROPIC_AUTH_TOKEN
   const proc = Bun.spawn(
     [claudePath, "--print", "--model", "sonnet", "--tools", "", "--output-format", "text", "--setting-sources", "", "--system-prompt", ""],
     {
       stdin: new Blob([prompt]),
       stdout: "pipe",
-      stderr: "pipe",
+      stderr: "ignore",
       env,
     }
   )
@@ -298,8 +299,7 @@ async function executeWork(issue: Issue, config: WorkerConfig): Promise<{ output
   clearTimeout(timer)
 
   if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text()
-    return { output: `Exit ${exitCode}: ${stderr.slice(0, 500)}`, success: false }
+    return { output: `Worker process exited with code ${exitCode}; diagnostics were withheld to protect credentials.`, success: false }
   }
 
   return { output: output.trim(), success: true }

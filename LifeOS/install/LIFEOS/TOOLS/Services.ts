@@ -14,11 +14,14 @@
  */
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const HOME = homedir();
-const CLAUDE = join(HOME, ".claude");
-const LIFEOS = join(CLAUDE, "LIFEOS");
+const CONFIG_ROOT =
+  process.env.LIFEOS_CONFIG_ROOT ||
+  process.env.CLAUDE_CONFIG_DIR ||
+  (process.env.LIFEOS_DIR ? dirname(process.env.LIFEOS_DIR) : join(HOME, ".claude"));
+const LIFEOS = process.env.LIFEOS_DIR || join(CONFIG_ROOT, "LIFEOS");
 const TOOLS = join(LIFEOS, "TOOLS");
 const PULSE = join(LIFEOS, "PULSE");
 const LAUNCH_AGENTS = join(HOME, "Library", "LaunchAgents");
@@ -163,6 +166,9 @@ if (cmd === "status" || cmd === "list") {
     const inst = s.install.startsWith("#") ? s.install.slice(1).trim() : `\`${s.install.replace(HOME, "~")}\``;
     console.log(`| **${s.title}** \`${s.label}\` | ${s.category} | ${cad} | ${s.optIn ? "yes" : "core"} | ${s.purpose} | ${inst} |`);
   }
+} else if ((cmd === "install" || cmd === "uninstall") && process.platform !== "darwin") {
+  console.error(`${cmd} requires macOS launchd; current platform is ${process.platform}`);
+  process.exit(1);
 } else if (cmd === "install") {
   const targets = SERVICES.filter(pick).filter((s) => (all || onlyArg ? true : !s.optIn) && !s.install.startsWith("#"));
   console.log(`Installing ${targets.length} service(s):`);

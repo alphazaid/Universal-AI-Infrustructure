@@ -31,17 +31,18 @@ import {
   writeFileSync,
 } from "fs"
 import MiniSearch from "minisearch"
+import { getLifeosConfigRoot, getLifeosDir } from "../../TOOLS/lib/paths"
 
 // Path Construction
 
-const HOME = process.env.HOME ?? "~"
-const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS")
+const CONFIG_ROOT = getLifeosConfigRoot()
+const LIFEOS_DIR = getLifeosDir()
 const DOCUMENTATION_DIR = join(LIFEOS_DIR, "DOCUMENTATION")
 const KNOWLEDGE_DIR = join(LIFEOS_DIR, "MEMORY", "KNOWLEDGE")
 const ALGORITHM_DIR = join(LIFEOS_DIR, "ALGORITHM")
-const SKILLS_DIR = join(HOME, ".claude", "skills")
-const HOOKS_DIR = join(HOME, ".claude", "hooks")
-const SETTINGS_PATH = join(HOME, ".claude", "settings.json")
+const SKILLS_DIR = join(CONFIG_ROOT, "skills")
+const HOOKS_DIR = join(CONFIG_ROOT, "hooks")
+const SETTINGS_PATH = join(CONFIG_ROOT, "settings.json")
 const ARBOL_WORKERS_DIR = join(LIFEOS_DIR, "USER", "CUSTOMIZATIONS", "ARBOL", "Workers")
 
 const SYSTEM_PROMPT_PATH = join(LIFEOS_DIR, "LIFEOS_SYSTEM_PROMPT.md")

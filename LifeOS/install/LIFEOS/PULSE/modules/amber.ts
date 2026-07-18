@@ -20,14 +20,16 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { getLifeosConfigRoot, getLifeosDir } from "../../TOOLS/lib/paths";
 
 const MODULE_NAME = "amber";
-const HOME = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
-const KNOWLEDGE_DIR = join(HOME, "LIFEOS", "MEMORY", "KNOWLEDGE");
-const X_STATE_DIR = join(HOME, "skills", "_X", "State");
-const ENV_PATH = join(HOME, ".env");
+const CONFIG_ROOT = getLifeosConfigRoot();
+const LIFEOS_DIR = getLifeosDir();
+const KNOWLEDGE_DIR = join(LIFEOS_DIR, "MEMORY", "KNOWLEDGE");
+const X_STATE_DIR = join(CONFIG_ROOT, "skills", "_X", "State");
+const ENV_PATH = join(CONFIG_ROOT, ".env");
 const ARBOL_CFG = join(homedir(), ".config", "arbol", "config.yaml");
-const ARBOL_WORKERS = join(HOME, "LIFEOS", "USER", "CUSTOMIZATIONS", "ARBOL", "Workers");
+const ARBOL_WORKERS = join(LIFEOS_DIR, "USER", "CUSTOMIZATIONS", "ARBOL", "Workers");
 
 const CACHE_TTL_MS = 60_000;
 

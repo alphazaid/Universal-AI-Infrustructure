@@ -16,13 +16,13 @@
  * never writes to any source (Anti-criterion ISC).
  */
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getLifeosDir } from "../../TOOLS/lib/paths";
 
 const MODULE_NAME = "assets";
-const CLAUDE_DIR = process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude");
-const GEAR_PATH = join(CLAUDE_DIR, "LIFEOS", "USER", "GEAR.md");
-const NETWORK_DIR = join(CLAUDE_DIR, "LIFEOS", "MEMORY", "_NETWORK");
+const LIFEOS_DIR = getLifeosDir();
+const GEAR_PATH = join(LIFEOS_DIR, "USER", "GEAR.md");
+const NETWORK_DIR = join(LIFEOS_DIR, "MEMORY", "_NETWORK");
 const NETWORK_ASSETS_JSON = join(NETWORK_DIR, "assets.json");
 const state = { running: false };
 

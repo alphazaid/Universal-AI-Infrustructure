@@ -10,16 +10,11 @@
  * Every field is derived from the markdown table at request time.
  */
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import { join } from "node:path";
+import { getLifeosDir } from "../../TOOLS/lib/paths";
 
 const MODULE_NAME = "projects";
-const PROJECTS_PATH = join(
-  process.env.CLAUDE_CONFIG_DIR || join(homedir(), ".claude"),
-  "LIFEOS",
-  "USER",
-  "PROJECTS.md",
-);
+const PROJECTS_PATH = join(getLifeosDir(), "USER", "PROJECTS.md");
 const state = { running: false };
 
 export type Badge =

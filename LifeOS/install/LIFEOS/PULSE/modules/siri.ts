@@ -19,8 +19,11 @@
 
 import { query } from "@anthropic-ai/claude-agent-sdk"
 import { buildLifeosContextBlock } from "./telegram"
+import { getLifeosConfigRoot, getLifeosDir } from "../../TOOLS/lib/paths"
 
-const CWD = `${process.env.HOME}/.claude`
+const CONFIG_ROOT = getLifeosConfigRoot()
+const LIFEOS_DIR = getLifeosDir()
+const CWD = CONFIG_ROOT
 const IDLE_TIMEOUT_MS = 60 * 60 * 1000 // 60 min — same thread boundary as Telegram
 const SDK_TIMEOUT_MS = 50_000 // Shortcuts' Get Contents of URL times out ~60s; stay under it
 const MAX_TURNS = 10 // speed over depth — this is a spoken exchange, not a work session
@@ -92,7 +95,13 @@ async function runTurn(text: string): Promise<string> {
     settingSources: ["user", "project"], // no "local" — skip CLAUDE.md mode/format machinery
     // Channel marker — hooks skip the desktop /notify voice when not "desktop".
     // {{PRINCIPAL_NAME}} hears the reply through Siri's TTS on the phone, not the Mac speaker.
-    env: { ...process.env, LIFEOS_NOTIFICATION_CHANNEL: "siri" },
+    env: {
+      ...process.env,
+      CLAUDE_CONFIG_DIR: CONFIG_ROOT,
+      LIFEOS_CONFIG_ROOT: CONFIG_ROOT,
+      LIFEOS_DIR,
+      LIFEOS_NOTIFICATION_CHANNEL: "siri",
+    },
     maxTurns: MAX_TURNS,
     canUseTool: (toolName: string, input: unknown) => {
       if (toolName === "Bash") {

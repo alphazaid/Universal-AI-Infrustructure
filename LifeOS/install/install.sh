@@ -30,7 +30,7 @@ set -euo pipefail
 # install never hard-fails on a network hiccup.
 # Repo owner/name is parameterized — set at publish time, never hard-coded here.
 LIFEOS_REPO="${LIFEOS_REPO:-danielmiessler/LifeOS}"
-LIFEOS_FALLBACK_TAG="v7.0.0"
+LIFEOS_FALLBACK_TAG="v7.1.1"
 if [ -n "${LIFEOS_VERSION:-}" ]; then
   LIFEOS_TAG="v${LIFEOS_VERSION}"
 elif [ -z "${LIFEOS_TAG:-}" ]; then
@@ -74,7 +74,7 @@ OS="$(uname -s)"
 case "$OS" in
   Darwin) info "Platform: macOS" ;;
   Linux)  info "Platform: Linux" ;;
-  *)      warn "Unrecognized OS: $OS — proceeding; the setup will adapt." ;;
+  *)      error "Unsupported OS: $OS. This bootstrap supports macOS and Linux only."; exit 1 ;;
 esac
 
 need() { command -v "$1" >/dev/null 2>&1 && success "$1 ($(command -v "$1"))" || { error "Required: $1"; return 1; }; }
@@ -126,17 +126,42 @@ success "bun ($(command -v bun), v$(bun --version 2>/dev/null))"
 
 # ─── Step 2: Detect harness (no clobber) ─────────────────────────
 step "2/5  Detecting your harness"
+DETECTED_HARNESS="${LIFEOS_HARNESS:-}"
 if [ -z "$LIFEOS_SKILLS_DIR" ]; then
-  if [ -d "$HOME/.claude" ]; then LIFEOS_SKILLS_DIR="$HOME/.claude/skills"
-  elif [ -d "$HOME/.config/claude" ]; then LIFEOS_SKILLS_DIR="$HOME/.config/claude/skills"
-  else LIFEOS_SKILLS_DIR="$HOME/.claude/skills"; fi
+  case "${DETECTED_HARNESS}" in
+    claude|claude-code|omp)
+      LIFEOS_CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}"
+      ;;
+    codex)
+      LIFEOS_CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-${CODEX_HOME:-$HOME/.codex}}"
+      ;;
+    gemini)
+      LIFEOS_CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-${GEMINI_CONFIG_DIR:-$HOME/.gemini}}"
+      ;;
+    opencode)
+      LIFEOS_CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}}"
+      ;;
+    "")
+      if command -v claude >/dev/null 2>&1; then DETECTED_HARNESS="claude-code"; LIFEOS_CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}"
+      elif command -v omp >/dev/null 2>&1; then DETECTED_HARNESS="omp"; LIFEOS_CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-$HOME/.claude}"
+      elif command -v codex >/dev/null 2>&1; then DETECTED_HARNESS="codex"; LIFEOS_CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-${CODEX_HOME:-$HOME/.codex}}"
+      elif command -v gemini >/dev/null 2>&1; then DETECTED_HARNESS="gemini"; LIFEOS_CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-${GEMINI_CONFIG_DIR:-$HOME/.gemini}}"
+      elif command -v opencode >/dev/null 2>&1; then DETECTED_HARNESS="opencode"; LIFEOS_CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-${OPENCODE_CONFIG_DIR:-$HOME/.config/opencode}}"
+      else DETECTED_HARNESS="unknown"; LIFEOS_CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-$HOME/.lifeos}"
+      fi
+      ;;
+    *)
+      error "Unsupported LIFEOS_HARNESS: ${DETECTED_HARNESS}. Use claude-code, omp, codex, gemini, or opencode."
+      exit 1
+      ;;
+  esac
+  LIFEOS_SKILLS_DIR="$LIFEOS_CONFIG_ROOT/skills"
 fi
+info "Harness: ${BOLD}${DETECTED_HARNESS:-custom}${RESET}"
 info "Skills dir: ${BOLD}${LIFEOS_SKILLS_DIR/#$HOME/~}${RESET}"
 TARGET="$LIFEOS_SKILLS_DIR/LifeOS"
-if [ -e "$TARGET" ]; then
-  TS="$(date +%Y%m%d-%H%M%S)"
-  warn "Existing LifeOS skill — backing up ONLY it to LifeOS.backup-$TS (your other files are untouched)."
-  run mv "$TARGET" "$TARGET.backup-$TS"
+if [ -e "$TARGET" ] || [ -L "$TARGET" ]; then
+  warn "Existing LifeOS skill detected — its replacement will be staged before the active copy moves."
 else
   success "No existing LifeOS skill — clean drop-in."
 fi
@@ -144,27 +169,46 @@ fi
 # ─── Step 3: Fetch the LifeOS release ────────────────────────────
 step "3/5  Fetching LifeOS ${LIFEOS_TAG}"
 TMP_DIR="$(mktemp -d -t lifeos-install-XXXXXX)"
-trap 'rm -rf "$TMP_DIR"' EXIT
+trap 'rm -rf "$TMP_DIR" "${STAGED_TARGET:-}"' EXIT
 if [ -n "$LIFEOS_SRC" ]; then
   info "Local source: ${LIFEOS_SRC/#$HOME/~}"
   SRC_SKILL="$LIFEOS_SRC/$LIFEOS_RELEASE_SUBPATH"
   [ -d "$SRC_SKILL" ] || { error "LifeOS skill not found at $SRC_SKILL"; exit 1; }
+elif [ "$DRY_RUN" = "1" ]; then
+  info "Would download ${LIFEOS_TAG} from ${LIFEOS_TARBALL_URL}"
+  SRC_SKILL="<downloaded-release>/$LIFEOS_RELEASE_SUBPATH"
 else
   info "Downloading ${LIFEOS_TAG} (HTTPS, no auth)..."
   if [ "$LIFEOS_REPO" = "OWNER/REPO" ]; then
     error "Network install needs LIFEOS_REPO set (owner/name), or use LIFEOS_SRC for a local install."; exit 1
   fi
-  run bash -c "curl -fsSL '$LIFEOS_TARBALL_URL' | tar -xzf - -C '$TMP_DIR'"
+  bash -c "curl -fsSL '$LIFEOS_TARBALL_URL' | tar -xzf - -C '$TMP_DIR'"
   EXTRACTED="$(find "$TMP_DIR" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
   SRC_SKILL="$EXTRACTED/$LIFEOS_RELEASE_SUBPATH"
   [ -d "$SRC_SKILL" ] || { error "LifeOS skill not in tarball at $LIFEOS_RELEASE_SUBPATH"; exit 1; }
 fi
 success "Fetched ${LIFEOS_TAG}"
 
-# ─── Step 4: Place the skill (additive) ──────────────────────────
-step "4/5  Installing the LifeOS skill (additive — nothing else touched)"
-run mkdir -p "$LIFEOS_SKILLS_DIR"
-run cp -R "$SRC_SKILL" "$TARGET"
+# ─── Step 4: Stage and atomically replace the skill ─────────────
+step "4/5  Installing the LifeOS skill (transactional — other skills untouched)"
+if [ "$DRY_RUN" = "1" ]; then
+  info "[DRY-RUN] Would stage $SRC_SKILL beside $TARGET, then atomically replace the active skill."
+else
+  mkdir -p "$LIFEOS_SKILLS_DIR"
+  TS="$(date +%Y%m%d-%H%M%S)-$$"
+  STAGED_TARGET="${TARGET}.staging-${TS}"
+  BACKUP_TARGET=""
+  cp -R "$SRC_SKILL" "$STAGED_TARGET"
+  if [ -e "$TARGET" ] || [ -L "$TARGET" ]; then
+    BACKUP_TARGET="${TARGET}.backup-${TS}"
+    mv "$TARGET" "$BACKUP_TARGET"
+  fi
+  if ! mv "$STAGED_TARGET" "$TARGET"; then
+    [ -n "$BACKUP_TARGET" ] && mv "$BACKUP_TARGET" "$TARGET"
+    error "Could not activate the staged LifeOS skill; the prior installation was restored."
+    exit 1
+  fi
+fi
 success "LifeOS skill placed at ${TARGET/#$HOME/~}"
 
 # ─── Step 5: Hand off to the agentic setup ───────────────────────
@@ -176,9 +220,18 @@ info "The rest is a conversation — it detects conflicts, asks about your TELOS
 info "(current state + ideal state), pulls in any sources you provide, and wires"
 info "hooks with your permission. Nothing changes without you saying yes."
 echo
-if command -v claude >/dev/null 2>&1 && [ -z "${CLAUDECODE:-}" ]; then
-  info "Launching setup..."
-  exec claude "/lifeos-setup"
-else
-  printf "  ${BOLD}Open your harness and run:${RESET}  ${LIGHT_BLUE}/lifeos-setup${RESET}\n\n"
-fi
+case "$DETECTED_HARNESS" in
+  claude|claude-code)
+    if command -v claude >/dev/null 2>&1 && [ -z "${CLAUDECODE:-}" ]; then
+      info "Launching setup in Claude Code..."
+      exec claude "/lifeos-setup"
+    fi
+    ;;
+  omp)
+    if command -v omp >/dev/null 2>&1; then
+      info "Launching setup in OMP..."
+      exec omp "/lifeos-setup"
+    fi
+    ;;
+esac
+printf "  ${BOLD}Open ${DETECTED_HARNESS:-your harness} and run:${RESET}  ${LIGHT_BLUE}/lifeos-setup${RESET}\n\n"

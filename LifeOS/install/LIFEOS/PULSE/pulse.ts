@@ -18,15 +18,16 @@ import { join } from "path"
 import { readFileSync, existsSync } from "fs"
 import { parse } from "smol-toml"
 import { loadLifeosConfig } from "../TOOLS/LifeosConfig"
+import { getLifeosConfigRoot, getLifeosDir } from "../TOOLS/lib/paths.ts"
 import { isLoopbackHostHeader } from "./lib/host-guard.ts"
 
 // ── Load .env before anything else ──
 
-const HOME = process.env.HOME ?? "~"
-const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS")
+const CONFIG_ROOT = getLifeosConfigRoot()
+const LIFEOS_DIR = getLifeosDir()
 const PULSE_DIR = join(LIFEOS_DIR, "PULSE")
 
-const envPath = join(HOME, ".claude", ".env")
+const envPath = join(CONFIG_ROOT, ".env")
 try {
   const envContent = readFileSync(envPath, "utf-8")
   for (const line of envContent.split("\n")) {

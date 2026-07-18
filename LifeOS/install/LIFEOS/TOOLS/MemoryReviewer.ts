@@ -34,13 +34,15 @@ import {
   appendFileSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { dirname, join as pathJoin, resolve as pathResolve } from "node:path";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 
 import { add as memoryAdd, type AddResult } from "./MemorySystem";
 import { read as memoryWriterRead } from "./MemoryWriter";
@@ -55,12 +57,14 @@ import {
 
 // ── Constants ──
 
-const CLAUDE_ROOT = pathResolve(homedir(), ".claude");
-const HARNESS_PROJECTS_DIR = pathResolve(homedir(), ".claude", "projects");
-const OMP_SESSIONS_DIR = pathResolve(homedir(), ".omp", "agent", "sessions");
-const RUNS_LOG_PATH = pathResolve(CLAUDE_ROOT, "LIFEOS/MEMORY/OBSERVABILITY/reviewer-runs.jsonl");
-const RUNS_DEBUG_DIR = pathResolve(CLAUDE_ROOT, "LIFEOS/MEMORY/OBSERVABILITY/reviewer-runs");
-const REVIEW_CONFIG_PATH = pathResolve(CLAUDE_ROOT, "LIFEOS/USER/CONFIG/memory-review.json");
+const CONFIG_ROOT = process.env.LIFEOS_CONFIG_ROOT || process.env.CLAUDE_CONFIG_DIR || pathResolve(homedir(), ".claude");
+const LIFEOS_DIR = process.env.LIFEOS_DIR || pathResolve(CONFIG_ROOT, "LIFEOS");
+const HARNESS_PROJECTS_DIR = pathResolve(CONFIG_ROOT, "projects");
+const OMP_AGENT_DIR = process.env.PI_CODING_AGENT_DIR || pathResolve(homedir(), ".omp", "agent");
+const OMP_SESSIONS_DIR = process.env.OMP_SESSIONS_DIR || pathResolve(OMP_AGENT_DIR, "sessions");
+const RUNS_LOG_PATH = pathResolve(LIFEOS_DIR, "MEMORY/OBSERVABILITY/reviewer-runs.jsonl");
+const RUNS_DEBUG_DIR = pathResolve(LIFEOS_DIR, "MEMORY/OBSERVABILITY/reviewer-runs");
+const REVIEW_CONFIG_PATH = pathResolve(LIFEOS_DIR, "USER/CONFIG/memory-review.json");
 
 const DEFAULT_TURNS = 20;
 // Curation is heavier than the old additive capture — the reviewer now reads
@@ -294,8 +298,8 @@ export interface CurrentMemorySnapshot {
   assistant: string[];
 }
 
-const PRINCIPAL_MEMORY_PATH = pathResolve(CLAUDE_ROOT, "LIFEOS/USER/PRINCIPAL/PRINCIPAL_MEMORY.md");
-const DA_MEMORY_PATH = pathResolve(CLAUDE_ROOT, "LIFEOS/USER/DIGITAL_ASSISTANT/DA_MEMORY.md");
+const PRINCIPAL_MEMORY_PATH = pathResolve(LIFEOS_DIR, "USER/PRINCIPAL/PRINCIPAL_MEMORY.md");
+const DA_MEMORY_PATH = pathResolve(LIFEOS_DIR, "USER/DIGITAL_ASSISTANT/DA_MEMORY.md");
 
 /** Read both hot-layer files' current entries so the reviewer curates against reality. */
 export function readCurrentMemorySnapshot(): CurrentMemorySnapshot {
@@ -524,6 +528,10 @@ export interface ReviewOptions {
   /** For testing: bypass real inference, return this canned response */
   mockInferenceResponse?: string;
   timeoutMs?: number;
+  /** Test seam: avoid reading the principal's live memory snapshot. */
+  memorySnapshot?: CurrentMemorySnapshot;
+  /** Test seam: suppress run logs/debug artifacts. */
+  suppressObservability?: boolean;
 }
 
 export interface ReviewResult {
@@ -540,12 +548,14 @@ export interface ReviewResult {
 export async function review(opts: ReviewOptions = {}): Promise<ReviewResult> {
   const runId = tsSlug();
   const turns = opts.turns ?? DEFAULT_TURNS;
+  const log = opts.suppressObservability ? (_row: Record<string, unknown>) => {} : logRunSummary;
+  const debug = opts.suppressObservability ? (_id: string, _files: Record<string, string>) => {} : writeRunDebug;
 
   // 1. Locate transcript
   const transcript = opts.input ?? findMostRecentTranscript();
   if (!transcript) {
     const result: ReviewResult = { ok: false, runId, transcript: null, exchanges: 0, inference_duration_ms: 0, parse_ok: false, error: "no transcript available" };
-    logRunSummary({ ts: new Date().toISOString(), ...result });
+    log({ ts: new Date().toISOString(), ...result });
     return result;
   }
 
@@ -553,19 +563,19 @@ export async function review(opts: ReviewOptions = {}): Promise<ReviewResult> {
   const exchanges = extractRecentExchanges(transcript, turns);
   if (exchanges.length === 0) {
     const result: ReviewResult = { ok: false, runId, transcript, exchanges: 0, inference_duration_ms: 0, parse_ok: false, error: "no exchanges extracted" };
-    logRunSummary({ ts: new Date().toISOString(), ...result });
+    log({ ts: new Date().toISOString(), ...result });
     return result;
   }
 
   // 3. Build prompt — inject CURRENT memory state so the reviewer curates
   //    against reality (the op:"set" path REPLACES, so it must see what's there).
-  const snapshot = readCurrentMemorySnapshot();
+  const snapshot = opts.memorySnapshot ?? readCurrentMemorySnapshot();
   // Resolve {{PRINCIPAL_NAME}} / {{DA_NAME}} placeholders (present in shipped
   // installs after the release scrubber) to the configured identity before the
   // prompts reach the model. No-op in the live tree.
   const systemPrompt = renderNames(REVIEWER_SYSTEM_PROMPT);
   const userPrompt = renderNames(buildReviewerUserPrompt(exchanges, snapshot));
-  writeRunDebug(runId, {
+  debug(runId, {
     "prompt.system.md": systemPrompt,
     "prompt.user.md": userPrompt,
     "transcript.txt": `Source: ${transcript}\nExchanges: ${exchanges.length}\n`,
@@ -589,33 +599,35 @@ export async function review(opts: ReviewOptions = {}): Promise<ReviewResult> {
     inferenceDuration = Date.now() - startedAt;
     if (!result.success) {
       const failed: ReviewResult = { ok: false, runId, transcript, exchanges: exchanges.length, inference_duration_ms: inferenceDuration, parse_ok: false, error: `inference failed: ${result.error}` };
-      logRunSummary({ ts: new Date().toISOString(), ...failed });
+      log({ ts: new Date().toISOString(), ...failed });
       return failed;
     }
     inferenceOutput = result.output;
   }
-  writeRunDebug(runId, { "response.raw.txt": inferenceOutput });
+  debug(runId, { "response.raw.txt": inferenceOutput });
 
   // 5. Parse output
   const parsed = parseReviewerOutput(inferenceOutput);
   if (!parsed.ok) {
-    writeRunDebug(runId, { "parse-error.txt": `${parsed.error}\n\nRaw:\n${parsed.raw}` });
+    debug(runId, { "parse-error.txt": `${parsed.error}\n\nRaw:\n${parsed.raw}` });
     const failed: ReviewResult = { ok: false, runId, transcript, exchanges: exchanges.length, inference_duration_ms: inferenceDuration, parse_ok: false, error: `parse failed: ${parsed.error}` };
-    logRunSummary({ ts: new Date().toISOString(), ...failed });
+    log({ ts: new Date().toISOString(), ...failed });
     return failed;
   }
-  writeRunDebug(runId, { "response.parsed.json": JSON.stringify(parsed.output, null, 2) });
+  debug(runId, { "response.parsed.json": JSON.stringify(parsed.output, null, 2) });
 
   // 6. Dispatch
   const { summary, results } = dispatchItems(parsed.output.items, { dryRun: opts.dryRun });
-  writeRunDebug(runId, {
+  debug(runId, {
     "dispatch.log": [
       `Items: ${summary.total} (succeeded=${summary.succeeded} failed=${summary.failed})`,
       `By type: ${JSON.stringify(summary.by_type)}`,
       ...summary.failures.map((f) => `  FAIL [${f.index}] ${f.type}: ${f.error}`),
       "",
       "Per-item results:",
-      ...results.map((r, i) => `[${i}] ${r.ok ? "OK " + (r as any).type : "FAIL " + (r as any).code}: ${r.ok ? (r as any).path?.replace(CLAUDE_ROOT, "~/.claude") : (r as any).message}`),
+      ...results.map((r, i) => r.ok
+        ? `[${i}] OK ${r.type}: ${r.path.replace(CONFIG_ROOT, "~/.claude")}`
+        : `[${i}] FAIL ${r.code}: ${r.message}`),
     ].join("\n"),
   });
 
@@ -628,7 +640,7 @@ export async function review(opts: ReviewOptions = {}): Promise<ReviewResult> {
     parse_ok: true,
     dispatch_summary: summary,
   };
-  logRunSummary({ ts: new Date().toISOString(), ...result });
+  log({ ts: new Date().toISOString(), ...result });
   return result;
 }
 
@@ -685,13 +697,12 @@ async function smokeTest(): Promise<number> {
   const mockResponse = JSON.stringify({
     items: [
       { type: "memory", actor: "principal", content: "PREFERENCE: smoke E2E mock" },
-      { type: "proposal", target_file: pathJoin(homedir(), ".claude/LIFEOS/USER/PRINCIPAL/PRINCIPAL_IDENTITY.md"), edit: "RULE: E2E mock", confidence: 0.5, rationale: "smoke" },
+      { type: "proposal", target_file: pathJoin(tmpdir(), "lifeos-reviewer-test-identity.md"), edit: "RULE: E2E mock", confidence: 0.5, rationale: "smoke" },
     ],
   });
 
-  // Use a synthetic transcript so we don't depend on real harness state
-  const synthDir = pathJoin(CLAUDE_ROOT, "LIFEOS/MEMORY/OBSERVABILITY/reviewer-test-synth");
-  mkdirSync(synthDir, { recursive: true });
+  // Use an isolated synthetic transcript; tests never read or write a real profile.
+  const synthDir = mkdtempSync(pathJoin(tmpdir(), "lifeos-memory-reviewer-"));
   const synthPath = pathJoin(synthDir, "synth.jsonl");
   writeFileSync(synthPath, [
     JSON.stringify({ timestamp: "2026-05-23T22:30:00Z", message: { role: "user", content: "Hey {{DA_NAME}}" } }),
@@ -702,39 +713,19 @@ async function smokeTest(): Promise<number> {
     input: synthPath,
     turns: 5,
     mockInferenceResponse: mockResponse,
+    dryRun: true,
+    memorySnapshot: { principal: [], assistant: [] },
+    suppressObservability: true,
   });
   check("E2E: review() returns ok", r.ok, `runId=${r.runId}, exchanges=${r.exchanges}`);
   check("E2E: dispatch ran", r.dispatch_summary !== undefined && r.dispatch_summary.total === 2);
-  check("E2E: memory write succeeded", r.dispatch_summary?.by_type.memory === 1);
-  check("E2E: proposal enqueue succeeded", r.dispatch_summary?.by_type.proposal === 1);
+  check("E2E: memory dispatch planned", r.dispatch_summary?.by_type.memory === 1);
+  check("E2E: proposal dispatch planned", r.dispatch_summary?.by_type.proposal === 1);
   check("E2E: zero dispatch failures", r.dispatch_summary?.failed === 0);
 
-  // Cleanup synth transcript + reviewer-runs debug dir for this run
-  try {
-    const { rmSync } = await import("node:fs");
-    rmSync(synthDir, { recursive: true, force: true });
-    rmSync(pathJoin(RUNS_DEBUG_DIR, r.runId), { recursive: true, force: true });
-  } catch { /* ignore */ }
-
-  // Cleanup synthetic memory entry
-  try {
-    const { read: mwRead, setEntries: mwSet } = await import("./MemoryWriter");
-    const PRINCIPAL_MEMORY_PATH = pathJoin(CLAUDE_ROOT, "LIFEOS/USER/PRINCIPAL/PRINCIPAL_MEMORY.md");
-    const cur = mwRead(PRINCIPAL_MEMORY_PATH);
-    if (!("code" in cur)) {
-      const cleaned = cur.entries.filter((e) => !e.includes("smoke E2E mock"));
-      mwSet(PRINCIPAL_MEMORY_PATH, cleaned, { updatedBy: "smoke-test-cleanup" });
-    }
-  } catch { /* ignore */ }
-
-  // 8. Real harness transcript — extract some exchanges (read-only probe)
-  const realTranscript = findMostRecentTranscript();
-  if (realTranscript) {
-    const real = extractRecentExchanges(realTranscript, 3);
-    check("extract: real harness transcript yields exchanges", real.length > 0, `last 3 of ${realTranscript.split("/").pop()}: ${real.length} exchanges`);
-  } else {
-    check("extract: harness directory accessible", false, "no transcript found (test environment)");
-  }
+  const extracted = extractRecentExchanges(synthPath, 3);
+  check("extract: isolated transcript yields exchanges", extracted.length === 1);
+  rmSync(synthDir, { recursive: true, force: true });
 
   console.log(`\n${pass} passed, ${fail} failed`);
   if (fail === 0) {

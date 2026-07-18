@@ -11,11 +11,15 @@
  */
 
 import { join, resolve } from "path"
+import { homedir } from "os"
 import { existsSync, mkdirSync } from "fs"
+import { getLifeosConfigRoot, getLifeosDir } from "../TOOLS/lib/paths.ts"
 
-const HOME = process.env.HOME ?? "~"
-const LIFEOS_DIR = join(HOME, ".claude", "LIFEOS")
+const HOME = process.env.HOME ?? homedir()
+const CONFIG_ROOT = getLifeosConfigRoot()
+const LIFEOS_DIR = getLifeosDir()
 const PULSE_DIR = join(LIFEOS_DIR, "PULSE")
+const BUN_PATH = Bun.which("bun") ?? process.execPath
 
 // ── Helpers ──
 
@@ -235,7 +239,7 @@ enabled = true
     ``,
   ]
 
-  const envPath = join(HOME, ".claude", ".env")
+  const envPath = join(CONFIG_ROOT, ".env")
   if (existsSync(envPath)) {
     warn(`.env already exists — appending worker config`)
     const existing = await Bun.file(envPath).text()
@@ -356,17 +360,24 @@ async function installService(): Promise<void> {
     return
   }
 
-  // Read template, substitute __HOME__ with actual user home, write to LaunchAgents.
-  // The source plist ships as a template (no hardcoded user paths) so the system
-  // file is deny-list clean; the installed copy is per-user materialized.
+  // Materialize the selected install roots into the per-user launchd profile.
   const template = await Bun.file(plistSrc).text()
-  const materialized = template.replaceAll("__HOME__", HOME)
+  const materialized = template
+    .replaceAll("__HOME__", HOME)
+    .replaceAll("__CONFIG_ROOT__", CONFIG_ROOT)
+    .replaceAll("__LIFEOS_DIR__", LIFEOS_DIR)
+    .replaceAll("__BUN_PATH__", BUN_PATH)
+  mkdirSync(join(HOME, "Library", "LaunchAgents"), { recursive: true })
   await Bun.write(plistDst, materialized)
   const proc = Bun.spawn(["launchctl", "load", plistDst], {
     stdout: "pipe",
     stderr: "pipe",
   })
-  await proc.exited
+  const exitCode = await proc.exited
+  if (exitCode !== 0) {
+    const stderr = await new Response(proc.stderr).text()
+    throw new Error(`launchctl load exited ${exitCode}: ${stderr.trim()}`)
+  }
   ok("launchd service installed")
 }
 
@@ -444,7 +455,7 @@ ${"═".repeat(50)}
   Time: ${Math.floor(elapsed / 60)}m ${elapsed % 60}s
 
   Next steps:
-  - Verify ANTHROPIC_API_KEY is set in ${join(HOME, ".claude", ".env")}
+  - Verify ANTHROPIC_API_KEY is set in ${join(CONFIG_ROOT, ".env")}
   - Create a test issue with label "status:ready" in one of your repos
   - Watch: tail -f ${join(PULSE_DIR, "logs", "pulse-stdout.log")}
   - Status: ${join(PULSE_DIR, "manage.sh")} status

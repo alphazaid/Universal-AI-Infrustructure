@@ -1,5 +1,5 @@
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { existsSync, readFileSync } from "node:fs";
 
 type FrameworkState = {
@@ -29,6 +29,18 @@ export function homeDir(): string {
   const userProfile = process.env.USERPROFILE;
   if (userProfile && existsSync(userProfile)) return userProfile;
   return home || userProfile || homedir();
+}
+
+export function getLifeosConfigRoot(): string {
+  if (process.env.LIFEOS_CONFIG_ROOT) return expandHome(process.env.LIFEOS_CONFIG_ROOT);
+  if (process.env.CLAUDE_CONFIG_DIR) return expandHome(process.env.CLAUDE_CONFIG_DIR);
+  if (process.env.LIFEOS_DIR) return dirname(expandHome(process.env.LIFEOS_DIR));
+  return join(homeDir(), ".claude");
+}
+
+export function getLifeosDir(): string {
+  if (process.env.LIFEOS_DIR) return expandHome(process.env.LIFEOS_DIR);
+  return join(getLifeosConfigRoot(), "LIFEOS");
 }
 
 export function expandHome(value: string): string {

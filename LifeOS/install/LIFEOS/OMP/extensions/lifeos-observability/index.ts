@@ -11,9 +11,10 @@
  * same files. Fail-open: observability must never break a tool call.
  */
 
+import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, appendFileSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { spawn } from "node:child_process";
 
 interface ContextUsage {
@@ -27,6 +28,7 @@ interface ExtensionCtx {
 	cwd?: string;
 	model?: { id?: string; name?: string };
 	getContextUsage?: () => ContextUsage | undefined | Promise<ContextUsage | undefined>;
+	sessionManager?: { getSessionFile?: () => string | undefined; getSessionId?: () => string | undefined };
 	ui?: {
 		setStatus?: (key: string, text: string) => void;
 		notify?: (message: string, level?: string) => void;
@@ -44,7 +46,8 @@ interface ExtensionApi {
 }
 
 const HOME = homedir();
-const LIFEOS_DIR = process.env.LIFEOS_DIR ?? join(HOME, ".claude", "LIFEOS");
+const CONFIG_ROOT = process.env.LIFEOS_CONFIG_ROOT || process.env.CLAUDE_CONFIG_DIR || join(HOME, ".claude");
+const LIFEOS_DIR = process.env.LIFEOS_DIR ?? join(CONFIG_ROOT, "LIFEOS");
 const OBS_DIR = join(LIFEOS_DIR, "MEMORY", "OBSERVABILITY");
 const ACTIVITY_FILE = join(OBS_DIR, "tool-activity.jsonl");
 const FAILURES_FILE = join(OBS_DIR, "tool-failures.jsonl");
@@ -57,6 +60,8 @@ const WIDGET_MAX_LINES = 10;
 const WORK_JSON = join(LIFEOS_DIR, "MEMORY", "STATE", "work.json");
 const DIRECT_DEPTH_TAG = " · DIRECT";
 const STATUSLINE_TIMEOUT_MS = 10_000;
+const BASH = typeof Bun !== "undefined" ? Bun.which("bash") : null;
+const FALLBACK_SESSION_ID = `omp-${randomUUID()}`;
 
 const TOOL_NAME_MAP: Record<string, string> = {
 	bash: "Bash",
@@ -69,9 +74,17 @@ const TOOL_NAME_MAP: Record<string, string> = {
 	task: "Agent",
 };
 
+function sessionId(ctx: ExtensionCtx): string {
+	const explicit = ctx.sessionManager?.getSessionId?.();
+	if (typeof explicit === "string" && explicit.length > 0) return explicit;
+	const file = ctx.sessionManager?.getSessionFile?.();
+	if (typeof file === "string" && file.length > 0) return basename(file).replace(/\.[^.]+$/, "");
+	return FALLBACK_SESSION_ID;
+}
+
 function readField(value: unknown, key: string): unknown {
 	if (value !== null && typeof value === "object" && key in value) {
-		const record: Record<string, unknown> = value;
+		const record = value as Record<string, unknown>;
 		return record[key];
 	}
 	return undefined;
@@ -130,10 +143,11 @@ const ompVersionPromise: Promise<string> = (() => {
  * statusline.
  */
 async function runStatusLine(ctx: ExtensionCtx, usage: ContextUsage | undefined): Promise<string[]> {
+	if (!BASH) return [];
 	const version = await ompVersionPromise;
 	const { promise, resolve } = Promise.withResolvers<string[]>();
 	const stdin = JSON.stringify({
-		session_id: "omp",
+		session_id: sessionId(ctx),
 		workspace: { current_dir: ctx.cwd ?? process.cwd() },
 		model: { display_name: ctx.model?.name ?? ctx.model?.id ?? "unknown" },
 		harness: { name: "OMP", version },
@@ -143,7 +157,7 @@ async function runStatusLine(ctx: ExtensionCtx, usage: ContextUsage | undefined)
 			total_input_tokens: usage?.tokens ?? 0,
 		},
 	});
-	const proc = spawn("bash", [STATUSLINE_SCRIPT], {
+	const proc = spawn(BASH, [STATUSLINE_SCRIPT], {
 		env: { ...process.env, LIFEOS_HARNESS: "omp" },
 		stdio: ["pipe", "pipe", "ignore"],
 	});
@@ -183,7 +197,7 @@ export function workSlugFromToolEvent(event: unknown): string {
 		?? readField(input, "file_path")
 		?? readField(input, "filePath");
 	if (typeof rawPath !== "string") return "";
-	return rawPath.match(/MEMORY\/WORK\/([A-Za-z0-9._-]+)\//)?.[1] ?? "";
+	return rawPath.replace(/\\/g, "/").match(/MEMORY\/WORK\/([A-Za-z0-9._-]+)\//)?.[1] ?? "";
 }
 
 export function depthTagForSession(
@@ -238,7 +252,7 @@ export default function lifeosObservability(pi: ExtensionApi): void {
 	let paintingPanel = false;
 	async function paintPanel(ctx: ExtensionCtx): Promise<void> {
 		if (!ctx.hasUI || !ctx.ui?.setWidget) return;
-		if (!existsSync(STATUSLINE_SCRIPT) || existsSync(STATUSLINE_OFF_MARKER)) {
+		if (!BASH || !existsSync(STATUSLINE_SCRIPT) || existsSync(STATUSLINE_OFF_MARKER)) {
 			ctx.ui.setWidget("lifeos-statusline", undefined);
 			return;
 		}
@@ -270,7 +284,12 @@ export default function lifeosObservability(pi: ExtensionApi): void {
 		description: "LifeOS statusline panel: /statusline on|off|refresh",
 		handler: (args, ctx) => {
 			const want = (typeof args === "string" ? args : "").trim().toLowerCase();
+			if (!BASH) {
+				ctx.ui?.notify?.("LifeOS statusline unavailable: bash is not installed", "warning");
+				return;
+			}
 			if (want === "off") {
+				mkdirSync(AGENT_DIR, { recursive: true });
 				writeFileSync(STATUSLINE_OFF_MARKER, `disabled ${new Date().toISOString()}\n`, "utf-8");
 				ctx.ui?.setWidget?.("lifeos-statusline", undefined);
 				ctx.ui?.notify?.("LifeOS statusline off (marker written)", "info");
@@ -291,7 +310,7 @@ export default function lifeosObservability(pi: ExtensionApi): void {
 		appendJsonl(ACTIVITY_FILE, {
 			timestamp: new Date().toISOString(),
 			type: "tool_use",
-			session_id: "omp",
+			session_id: sessionId(ctx),
 			tool_name: ccToolName(readField(event, "data") ?? event),
 			tool_input_preview: inputPreview(readField(event, "data") ?? event),
 			harness: "omp",
@@ -315,7 +334,7 @@ export default function lifeosObservability(pi: ExtensionApi): void {
 		appendJsonl(FAILURES_FILE, {
 			timestamp: new Date().toISOString(),
 			event: "tool_failure",
-			session_id: "omp",
+			session_id: sessionId(ctx),
 			tool_name: ccToolName(event),
 			error: error.slice(0, 1000),
 			tool_input_preview: inputPreview(event),

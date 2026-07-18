@@ -1,10 +1,39 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { chmodSync, existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
-import { hookEnv } from "./index";
+import { delimiter, join } from "node:path";
+import { hookEnv, launchFireAndForgetHook } from "./index";
 
 const tempDirs: string[] = [];
+function profileEnv(home: string, overrides: Record<string, string> = {}): Record<string, string> {
+	return {
+		...process.env,
+		HOME: home,
+		USERPROFILE: home,
+		LIFEOS_CONFIG_ROOT: join(home, ".claude"),
+		LIFEOS_DIR: join(home, ".claude", "LIFEOS"),
+		PI_CODING_AGENT_DIR: join(home, "agent"),
+		...overrides,
+	} as Record<string, string>;
+}
+
+function stubBinary(dir: string, name: string, unixBody: string, windowsBody: string): string {
+	const path = join(dir, process.platform === "win32" ? `${name}.cmd` : name);
+	writeFileSync(path, process.platform === "win32" ? `@echo off\r\n${windowsBody}\r\n` : `#!/bin/sh\n${unixBody}\n`);
+	if (process.platform !== "win32") chmodSync(path, 0o755);
+	return path;
+}
+function stageCorePrerequisites(home: string): void {
+	const configRoot = join(home, ".claude");
+	const lifeosTools = join(configRoot, "LIFEOS", "TOOLS");
+	cpSync(join(import.meta.dir, "../../../../hooks"), join(configRoot, "hooks"), { recursive: true });
+	mkdirSync(lifeosTools, { recursive: true });
+	for (const file of ["MemoryReviewer.ts", "TranscriptParser.ts"]) {
+		copyFileSync(join(import.meta.dir, "../../../TOOLS", file), join(lifeosTools, file));
+	}
+}
+
+
 
 afterEach(() => {
 	for (const dir of tempDirs.splice(0)) rmSync(dir, { recursive: true, force: true });
@@ -14,6 +43,24 @@ describe("Claude-free OMP inference", () => {
 	test("marks bridged hook subprocesses as OMP", () => {
 		expect(hookEnv({ cwd: "/tmp/project" }).LIFEOS_HARNESS).toBe("omp");
 	});
+	test("terminates fire-and-forget hooks at their declared timeout", async () => {
+		const home = mkdtempSync(join(tmpdir(), "lifeos-omp-hook-timeout-"));
+		tempDirs.push(home);
+		const hook = join(home, "stalled-hook.ts");
+		writeFileSync(hook, "await Bun.sleep(60_000);");
+
+		const startedAt = Date.now();
+		const child = launchFireAndForgetHook(hook, "{}", 50, profileEnv(home));
+		const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
+			child.once("close", (code, signal) => resolve({ code, signal }));
+		});
+
+		expect(result.code).toBeNull();
+		expect(result.signal).toBe("SIGKILL");
+		expect(child.killed).toBeTrue();
+		expect(Date.now() - startedAt).toBeLessThan(1_000);
+	});
+
 
 	test("uses OMP without attempting Claude when no backend is configured", async () => {
 		const home = mkdtempSync(join(tmpdir(), "lifeos-omp-backend-"));
@@ -22,13 +69,13 @@ describe("Claude-free OMP inference", () => {
 		const claudeSentinel = join(home, "claude-called");
 		mkdirSync(binDir);
 
-		const ompBin = join(binDir, "omp");
-		writeFileSync(ompBin, "#!/bin/sh\nprintf 'OMP_STUB_OK\\n'\n");
-		chmodSync(ompBin, 0o755);
-
-		const claudeBin = join(binDir, "claude");
-		writeFileSync(claudeBin, `#!/bin/sh\nprintf called > '${claudeSentinel}'\nprintf 'CLAUDE_STUB\\n'\n`);
-		chmodSync(claudeBin, 0o755);
+		stubBinary(binDir, "omp", "printf 'OMP_STUB_OK\\n'", "echo OMP_STUB_OK");
+		stubBinary(
+			binDir,
+			"claude",
+			`printf called > '${claudeSentinel}'\nprintf 'CLAUDE_STUB\\n'`,
+			`echo called>\"${claudeSentinel}\"\r\necho CLAUDE_STUB`,
+		);
 
 		const inferencePath = join(import.meta.dir, "../../../TOOLS/Inference.ts");
 		const probe = [
@@ -37,7 +84,7 @@ describe("Claude-free OMP inference", () => {
 			"console.log(JSON.stringify(result));",
 			"if (!result.success) process.exit(1);",
 		].join("\n");
-		const childEnv = { ...process.env, HOME: home, PATH: binDir, LIFEOS_HARNESS: "omp" };
+		const childEnv = profileEnv(home, { PATH: `${binDir}${delimiter}${process.env.PATH ?? ""}`, LIFEOS_HARNESS: "omp" });
 		delete childEnv.LIFEOS_INFERENCE_BACKEND;
 		delete childEnv.LIFEOS_OMP_INFERENCE_MODEL;
 		const child = Bun.spawn([process.execPath, "--eval", probe], {
@@ -64,7 +111,7 @@ describe("Claude-free OMP inference", () => {
 		const configPath = join(home, ".claude/LIFEOS/USER/CONFIG/inference-backend");
 		const runManage = async (...args: string[]) => {
 			const child = Bun.spawn([process.execPath, managePath, "inference", ...args], {
-				env: { ...process.env, HOME: home, PI_CODING_AGENT_DIR: join(home, "agent") },
+				env: profileEnv(home),
 				stdout: "pipe",
 				stderr: "pipe",
 			});
@@ -95,9 +142,10 @@ describe("Claude-free OMP inference", () => {
 	test("installs into a missing OMP agent directory", async () => {
 		const home = mkdtempSync(join(tmpdir(), "lifeos-manage-install-"));
 		tempDirs.push(home);
+		stageCorePrerequisites(home);
 		const agentDir = join(home, ".omp/agent");
 		const managePath = join(import.meta.dir, "../../manage.ts");
-		const env = { ...process.env, HOME: home, PI_CODING_AGENT_DIR: agentDir };
+		const env = profileEnv(home, { PI_CODING_AGENT_DIR: agentDir });
 
 		const install = Bun.spawn([process.execPath, managePath, "install"], {
 			env,
@@ -125,5 +173,51 @@ describe("Claude-free OMP inference", () => {
 		expect(await status.exited).toBe(0);
 		expect(statusStdout).not.toContain("✗");
 		expect(statusStdout).toContain("omp (automatic OMP default) — intelligence layer runs Claude-free");
+	});
+	test("reports missing hook prerequisites instead of a healthy source", () => {
+		const home = mkdtempSync(join(tmpdir(), "lifeos-manage-missing-hooks-"));
+		tempDirs.push(home);
+		const managePath = join(import.meta.dir, "../../manage.ts");
+		const env = profileEnv(home);
+
+		const status = Bun.spawnSync([process.execPath, managePath, "status"], {
+			env,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		expect(status.exitCode).toBe(0);
+		expect(status.stdout.toString()).toContain("source warnings:");
+		expect(status.stdout.toString()).toContain("missing bridged hook:");
+		expect(status.stdout.toString()).not.toContain("source: ✓");
+
+		const install = Bun.spawnSync([process.execPath, managePath, "install"], {
+			env,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		expect(install.exitCode).not.toBe(0);
+		expect(existsSync(join(home, "agent", "APPEND_SYSTEM.md"))).toBeFalse();
+	});
+
+	test("rejects malformed OMP config before creating integration links", () => {
+		const home = mkdtempSync(join(tmpdir(), "lifeos-manage-malformed-"));
+		tempDirs.push(home);
+		stageCorePrerequisites(home);
+		const agentDir = join(home, "agent");
+		mkdirSync(agentDir, { recursive: true });
+		const configPath = join(agentDir, "config.yml");
+		const malformed = "extensions: [\\n";
+		writeFileSync(configPath, malformed);
+
+		const managePath = join(import.meta.dir, "../../manage.ts");
+		const result = Bun.spawnSync([process.execPath, managePath, "install"], {
+			env: profileEnv(home, { PI_CODING_AGENT_DIR: agentDir }),
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+
+		expect(result.exitCode).not.toBe(0);
+		expect(readFileSync(configPath, "utf8")).toBe(malformed);
+		expect(existsSync(join(agentDir, "APPEND_SYSTEM.md"))).toBe(false);
 	});
 });

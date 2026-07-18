@@ -18,9 +18,12 @@ if [ -z "$HOME" ]; then
     [ -z "$HOME" ] && HOME="$(eval echo "~$(id -un)" 2>/dev/null)"
 fi
 
-LIFEOS_DIR="${LIFEOS_DIR:-$HOME/.claude/LIFEOS}"
-# Claude Code injects settings.json env values without shell expansion (LifeOS#1404):
-# a shipped value of "$HOME/.claude/LIFEOS" arrives literal. Expand it here.
+CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}"
+CONFIG_ROOT="${CONFIG_ROOT/#\$HOME/$HOME}"
+CONFIG_ROOT="${CONFIG_ROOT/#\$\{HOME\}/$HOME}"
+CONFIG_ROOT="${CONFIG_ROOT/#\~\//$HOME/}"
+LIFEOS_DIR="${LIFEOS_DIR:-$CONFIG_ROOT/LIFEOS}"
+# Harness env values are literal, so expand leading home markers before use.
 LIFEOS_DIR="${LIFEOS_DIR/#\$HOME/$HOME}"
 LIFEOS_DIR="${LIFEOS_DIR/#\$\{HOME\}/$HOME}"
 LIFEOS_DIR="${LIFEOS_DIR/#\~\//$HOME/}"
@@ -36,8 +39,8 @@ case "$LIFEOS_DIR" in
     *'$HOME'*|*'${HOME}'*|*'~'*) echo "LifeOS"; exit 0 ;;
 esac
 
-CLAUDE_HOME="$HOME/.claude"
-SETTINGS_FILE="$CLAUDE_HOME/settings.json"
+CLAUDE_HOME="$CONFIG_ROOT"
+SETTINGS_FILE="$CONFIG_ROOT/settings.json"
 RATINGS_FILE="$LIFEOS_DIR/MEMORY/LEARNING/SIGNALS/ratings.jsonl"
 MODEL_CACHE="$LIFEOS_DIR/MEMORY/STATE/model-cache.txt"
 QUOTES_FILE="$LIFEOS_DIR/USER/PRINCIPAL/Quotes.txt"
@@ -131,10 +134,8 @@ USAGE_CACHE_TTL=900      # 15 min: /api/oauth/usage has aggressive per-token rat
 USAGE_HARD_EXPIRY=21600  # P5: 6h. Show last-known-good (dimmed + stale badge) until here, then hide —
                          # replaces the old 1800s cliff that deleted the cache and vanished the counters.
 
-# Source .env for API keys. Canonical location is $HOME/.claude/.env (which is
-# typically a symlink to $HOME/.config/LIFEOS/.env). The historical $HOME/.claude/LIFEOS/.env
-# path is wrong and has been removed everywhere else — do not reintroduce it.
-[ -f "$HOME/.claude/.env" ] && source "$HOME/.claude/.env"
+# Source API keys from the selected harness profile.
+[ -f "$CONFIG_ROOT/.env" ] && source "$CONFIG_ROOT/.env"
 
 # Cross-platform file mtime (seconds since epoch). Detect stat flavor once;
 # probing both variants on every mtime check is expensive on macOS.
@@ -312,8 +313,8 @@ if [ "$context_pct" = "0" ] && [ "$total_input" -eq 0 ] 2>/dev/null; then
             [ -n "$_f" ] && [ -f "$LIFEOS_DIR/$_f" ] && _est=$((_est + $(wc -c < "$LIFEOS_DIR/$_f") * 10 / 35))
         done < <(jq -r '.loadAtStartup.files[]? // empty' "$SETTINGS_FILE" 2>/dev/null)
 
-        # Project memory files (CC native memory at ~/.claude/projects/*/memory/)
-        for _f in "$HOME"/.claude/projects/*/memory/MEMORY.md; do
+        # Project memory files from the selected harness profile.
+        for _f in "$CONFIG_ROOT"/projects/*/memory/MEMORY.md; do
             [ -f "$_f" ] && _est=$((_est + $(wc -c < "$_f") * 10 / 35))
         done
 
@@ -729,7 +730,7 @@ if [ "$MODE" != "nano" ]; then
 
     # Hook count flows through GetCounts.ts — same source banner uses. --single hooks
     # short-circuits all other walks (~20ms). Don't reintroduce inline jq here.
-    _hooks_cnt=$(bun "$HOME/.claude/LIFEOS/TOOLS/GetCounts.ts" --single hooks 2>/dev/null || echo 0)
+    _hooks_cnt=$(bun "$LIFEOS_DIR/TOOLS/GetCounts.ts" --single hooks 2>/dev/null || echo 0)
 
     _ratings_cnt=0
     [ -f "$RATINGS_FILE" ] && _ratings_cnt=$(wc -l < "$RATINGS_FILE" 2>/dev/null | tr -d ' ')
@@ -800,7 +801,7 @@ if [ "$MODE" = "normal" ]; then
                 if [ "$(uname -s)" = "Darwin" ]; then
                     cred_json=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null)
                 else
-                    cred_json=$(cat "${HOME}/.claude/.credentials.json" 2>/dev/null)
+                    cred_json=$(cat "$CONFIG_ROOT/.credentials.json" 2>/dev/null)
                 fi
                 token=$(echo "$cred_json" | jq -r '.claudeAiOauth.accessToken // empty' 2>/dev/null)
 

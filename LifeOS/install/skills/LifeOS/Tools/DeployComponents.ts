@@ -33,20 +33,20 @@
  */
 
 import { execFileSync } from "node:child_process";
-import { chmodSync, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { accessSync, chmodSync, constants, copyFileSync, cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { copyMissing, detectDevTree } from "./InstallEngine";
+import { copyMissing, defaultConfigRoot, detectDevTree } from "./InstallEngine";
 
 // Enhancement components are the à-la-carte half of setup. The "LifeOS Core"
 // (skills + system prompt + base settings + CLAUDE.md) is installed by Setup's
 // core steps; these are the opt-in extras the user (or their AI) picks some/all/none of.
 //
 // Two kinds:
-// - Non-launchd: statusline, tooltips, spinnerverbs, agents, commands — settings.json merges + file copies
-// - Launchd services: delegated to Services.ts (single source of truth for all 16 background services)
+// - Direct components: statusline, tooltips, spinnerverbs, agents, commands
+// - Background services: delegated to Services.ts on macOS; Pulse also uses its
+//   native systemd (Linux) or Scheduled Task (Windows) manager.
 //
-// Component names for launchd services are their short labels (pulse, worksweep, amberroute, etc.)
-// or the full label (com.lifeos.pulse). Services.ts handles the mapping.
+// Component names for background services are their short labels or full label.
 const NON_LAUNCHD_COMPONENTS = ["statusline", "tooltips", "spinnerverbs", "agents", "commands"] as const;
 type NonLaunchdComponent = (typeof NON_LAUNCHD_COMPONENTS)[number];
 
@@ -68,7 +68,8 @@ interface Ctx {
   payloadRoot: string; // <skillRoot>/install/LIFEOS — the shipped runtime tree
   installRoot: string; // <skillRoot>/install — settings.enhancements.json + agents/ live here
   home: string;
-  bun: string; // resolved bun binary path — substituted for __BUN_PATH__ in launchd plists
+  bun: string;
+  platform: string;
   launchAgents: string;
   apply: boolean;
 }
@@ -135,6 +136,12 @@ function ensurePresent(rel: string, ctx: Ctx): boolean {
 
 const uid = (): string => execFileSync("id", ["-u"]).toString().trim();
 
+function processExitSummary(error: unknown, action: string): string {
+  const statusValue = error !== null && typeof error === "object" && "status" in error ? error.status : undefined;
+  const status = statusValue === undefined || statusValue === null ? "unknown" : String(statusValue);
+  return `${action} failed (exit ${status}); process output withheld to avoid leaking credentials`;
+}
+
 function launchctl(args: string[]): { ok: boolean; out: string } {
   try {
     const out = execFileSync("launchctl", args, { stdio: ["pipe", "pipe", "pipe"], timeout: 15000 }).toString();
@@ -144,17 +151,75 @@ function launchctl(args: string[]): { ok: boolean; out: string } {
   }
 }
 
+function preparePulse(ctx: Ctx): { ok: true } | { ok: false; error: string } {
+  const livePulse = join(ctx.lifeosDir, "PULSE");
+  const payloadPulse = join(ctx.payloadRoot, "PULSE");
+  let staged = false;
+
+  if (!existsSync(livePulse)) {
+    if (!existsSync(payloadPulse)) return { ok: false, error: `Pulse payload missing: ${payloadPulse}` };
+    mkdirSync(dirname(livePulse), { recursive: true });
+    cpSync(payloadPulse, livePulse, { recursive: true });
+    staged = true;
+  }
+
+  const rootPackage = join(livePulse, "package.json");
+  if (!existsSync(rootPackage)) {
+    if (staged) rmSync(livePulse, { recursive: true, force: true });
+    return { ok: false, error: `Pulse package.json missing: ${rootPackage}` };
+  }
+
+  const installs = [
+    { cwd: livePulse, args: ["install", "--frozen-lockfile"], label: "Pulse runtime dependencies" },
+  ];
+  const dashboard = join(livePulse, "Observability");
+  if (existsSync(join(dashboard, "package.json"))) {
+    installs.push(
+      { cwd: dashboard, args: ["install", "--frozen-lockfile"], label: "Pulse dashboard dependencies" },
+      { cwd: dashboard, args: ["run", "build"], label: "Pulse dashboard build" },
+    );
+  }
+
+  const createdNodeModules: string[] = [];
+  try {
+    for (const step of installs) {
+      const nodeModules = join(step.cwd, "node_modules");
+      if (!existsSync(nodeModules)) createdNodeModules.push(nodeModules);
+      execFileSync(ctx.bun, step.args, {
+        cwd: step.cwd,
+        stdio: ["ignore", "pipe", "pipe"],
+        timeout: 180000,
+        env: { ...process.env, LIFEOS_CONFIG_ROOT: ctx.configRoot, LIFEOS_DIR: ctx.lifeosDir },
+      });
+    }
+    return { ok: true };
+  } catch (err) {
+    if (staged) {
+      rmSync(livePulse, { recursive: true, force: true });
+    } else {
+      for (const nodeModules of createdNodeModules) rmSync(nodeModules, { recursive: true, force: true });
+    }
+    return { ok: false, error: processExitSummary(err, "Pulse dependency preparation") };
+  }
+}
+
+function statusLineWired(value: unknown, command: string): boolean {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    && "command" in value && (value as Record<string, unknown>).command === command;
+}
+
 // ── component deployers ──────────────────────────────────────────────
 
 /** Statusline: place the script, chmod +x, wire settings.json statusLine. */
 function deployStatusline(ctx: Ctx): ComponentResult {
   const r: ComponentResult = { component: "statusline", ready: false, actions: [], blockers: [] };
+  if (ctx.platform === "win32") {
+    r.blockers.push("statusline requires a POSIX shell and is not available on Windows; omit this enhancement");
+    return r;
+  }
   const av = availability("LIFEOS_StatusLine.sh", ctx);
   const scriptPath = join(ctx.lifeosDir, "LIFEOS_StatusLine.sh");
   const settingsPath = join(ctx.configRoot, "settings.json");
-  // Build the settings.json command from the ACTUAL install root (ctx.lifeosDir),
-  // not a hardcoded ~/.claude — a custom --config-root (e.g. ~/.claude-fable) places
-  // the script under its own LIFEOS/, and the old literal pointed at the wrong tree.
   const command = scriptPath.startsWith(`${ctx.home}/`)
     ? `$HOME/${scriptPath.slice(ctx.home.length + 1)}`
     : scriptPath;
@@ -173,30 +238,32 @@ function deployStatusline(ctx: Ctx): ComponentResult {
   try {
     ensurePresent("LIFEOS_StatusLine.sh", ctx);
     chmodSync(scriptPath, 0o755);
-
-    // A populated-but-unparseable settings.json must NOT be rewritten from {} —
-    // that would silently drop the user's whole config. Abort with a blocker.
     let settings: Record<string, unknown> = {};
     if (existsSync(settingsPath)) {
+      let parsed: unknown;
       try {
-        settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+        parsed = JSON.parse(readFileSync(settingsPath, "utf-8"));
       } catch {
-        r.blockers.push(`settings.json exists but is not valid JSON — refusing to rewrite (would drop your config). Fix it, then re-run.`);
+        r.blockers.push("settings.json exists but is not valid JSON — refusing to rewrite");
         return r;
       }
+      if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
+        r.blockers.push("settings.json must contain a JSON object — refusing to rewrite");
+        return r;
+      }
+      settings = parsed as Record<string, unknown>;
     }
-    const current = settings.statusLine as Record<string, unknown> | undefined;
-    const alreadyWired = current?.command === command;
+    const alreadyWired = statusLineWired(settings.statusLine, command);
     if (!alreadyWired) {
       backup(settingsPath);
       settings.statusLine = { type: "command", command, refreshInterval: 1 };
       writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
     }
     r.applied = !alreadyWired;
-    const reread = JSON.parse(readFileSync(settingsPath, "utf-8"));
-    const wired = (reread.statusLine as Record<string, unknown> | undefined)?.command === command;
+    const reread = JSON.parse(readFileSync(settingsPath, "utf-8")) as Record<string, unknown>;
+    const wired = statusLineWired(reread.statusLine, command);
     let executable = false;
-    try { execFileSync("test", ["-x", scriptPath]); executable = true; } catch { executable = false; }
+    try { accessSync(scriptPath, constants.X_OK); executable = true; } catch { executable = false; }
     r.probe = { name: "statusline-wired", passed: wired && executable, detail: `wired=${wired} executable=${executable}${alreadyWired ? " (idempotent)" : ""}` };
   } catch (err) {
     r.error = err instanceof Error ? err.message : String(err);
@@ -319,17 +386,72 @@ function deployCommands(ctx: Ctx): ComponentResult {
  */
 function deployViaServices(component: LaunchdComponent, ctx: Ctx): ComponentResult {
   const r: ComponentResult = { component, ready: false, actions: [], blockers: [] };
-  const servicesTs = join(ctx.lifeosDir, "TOOLS", "Services.ts");
 
-  // Services.ts must be present (either in live tree or staged from payload)
+  if (ctx.platform !== "darwin") {
+    if (component !== "pulse") {
+      r.blockers.push(
+        `${component} has no ${ctx.platform} service adapter; install it on macOS or run its tool manually`,
+      );
+      return r;
+    }
+
+    const av = availability("PULSE", ctx);
+    if (!av.inLive && !av.inPayload) {
+      r.blockers.push(`PULSE not in live tree (${join(ctx.lifeosDir, "PULSE")}) or payload`);
+      return r;
+    }
+    const managerName = ctx.platform === "win32" ? "manage.ps1" : "manage.sh";
+    const manager = join(ctx.lifeosDir, "PULSE", managerName);
+    r.ready = true;
+    if (!ctx.apply) {
+      if (!av.inLive) r.actions.push(`stage PULSE from payload → ${join(ctx.lifeosDir, "PULSE")}`);
+      r.actions.push(
+        ctx.platform === "win32"
+          ? `powershell -File ${manager.replace(ctx.home, "~")} install`
+          : `bash ${manager.replace(ctx.home, "~")} install`,
+      );
+      return r;
+    }
+
+    try {
+      ensurePresent("PULSE", ctx);
+      if (!existsSync(manager)) {
+        r.blockers.push(`${managerName} still missing after staging: ${manager}`);
+        return r;
+      }
+      const env = { ...process.env, LIFEOS_CONFIG_ROOT: ctx.configRoot, LIFEOS_DIR: ctx.lifeosDir };
+      const isWin = ctx.platform === "win32";
+      const interpreter = isWin ? Bun.which("pwsh") || Bun.which("powershell") : Bun.which("bash");
+      if (!interpreter) {
+        r.blockers.push(isWin
+          ? "PowerShell is required to install the Windows Pulse Scheduled Task"
+          : "bash is required to install the Linux Pulse user service");
+        return r;
+      }
+      const managerArgs = isWin
+        ? ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", manager, "install"]
+        : [manager, "install"];
+      execFileSync(interpreter, managerArgs, {
+        stdio: ["pipe", "pipe", "pipe"],
+        timeout: 120000,
+        cwd: dirname(manager),
+        env,
+      });
+      r.applied = true;
+      r.probe = { name: "pulse-service-ready", passed: true, detail: `Pulse installed through ${managerName}` };
+    } catch (err) {
+      r.error = processExitSummary(err, "pulse service installation");
+    }
+    return r;
+  }
+
+  const servicesTs = join(ctx.lifeosDir, "TOOLS", "Services.ts");
   const av = availability("TOOLS", ctx);
   if (!av.inLive && !av.inPayload) {
     r.blockers.push(`TOOLS not in live tree (${join(ctx.lifeosDir, "TOOLS")}) or payload`);
     return r;
   }
   r.ready = true;
-
-  // Build the label — Services.ts accepts short form (pulse) or full (com.lifeos.pulse)
   const label = component.startsWith("com.lifeos.") ? component : `com.lifeos.${component}`;
 
   if (!ctx.apply) {
@@ -344,18 +466,17 @@ function deployViaServices(component: LaunchdComponent, ctx: Ctx): ComponentResu
       r.blockers.push(`Services.ts still missing after staging: ${servicesTs}`);
       return r;
     }
-    // Delegate to Services.ts
-    const out = execFileSync("bun", [servicesTs, "install", "--only", component, "--yes"], {
+    execFileSync(ctx.bun, [servicesTs, "install", "--only", component, "--yes"], {
       stdio: ["pipe", "pipe", "pipe"],
-      timeout: 120000, // some services take longer (e.g. Pulse waits for healthz)
+      timeout: 120000,
       cwd: dirname(servicesTs),
-    }).toString();
+      env: { ...process.env, LIFEOS_CONFIG_ROOT: ctx.configRoot, LIFEOS_DIR: ctx.lifeosDir },
+    });
     r.applied = true;
-    // Confirm the job actually loaded
     const loaded = launchctl(["print", `gui/${uid()}/${label}`]).ok;
-    r.probe = { name: `${component}-loaded`, passed: loaded, detail: loaded ? `${label} loaded via Services.ts` : `Services.ts exit 0 but ${label} not loaded: ${out.trim().split("\n").slice(-1)[0]}` };
+    r.probe = { name: `${component}-loaded`, passed: loaded, detail: loaded ? `${label} loaded via Services.ts` : `${label} was not loaded after Services.ts returned success` };
   } catch (err) {
-    r.error = err instanceof Error ? err.message : String(err);
+    r.error = processExitSummary(err, `${component} service installation`);
   }
   return r;
 }
@@ -386,10 +507,15 @@ function deploy(component: Component, ctx: Ctx): ComponentResult {
 function main(): void {
   const a = process.argv.slice(2);
   const home = process.env.HOME || "";
-  const configRoot = arg(a, "--config-root") || process.env.CLAUDE_CONFIG_DIR || join(home, ".claude");
+  const configRoot = arg(a, "--config-root") || defaultConfigRoot(home);
   const skillRoot = arg(a, "--skill-root") || join(import.meta.dir, "..");
+  const platform = arg(a, "--platform") || process.platform;
   const apply = a.includes("--apply");
   const allowDev = a.includes("--allow-dev");
+  if (!["darwin", "linux", "win32"].includes(platform)) {
+    console.log(JSON.stringify({ ok: false, error: `unsupported operating system: ${platform}` }, null, 2));
+    process.exit(1);
+  }
 
   if (detectDevTree(configRoot) && !allowDev) {
     console.log(JSON.stringify({ ok: false, refused: "dev-tree", detail: `${configRoot} is a LifeOS source tree (skills/_LIFEOS present) — refusing to deploy components. Use --allow-dev only in a sandbox.` }, null, 2));
@@ -425,13 +551,19 @@ function main(): void {
       : join(skillRoot, "install", "LifeOS"),
     installRoot: join(skillRoot, "install"),
     home,
-    // launchd runs the plist with a minimal PATH, so ProgramArguments[0] must be an
-    // absolute bun path. Prefer the interpreter running this installer; fall back to
-    // the standard bun install location.
-    bun: /\/bun$/.test(process.execPath) ? process.execPath : join(home, ".bun", "bin", "bun"),
+    bun: Bun.which("bun") || process.execPath,
     launchAgents: join(home, "Library", "LaunchAgents"),
     apply,
+    platform,
   };
+
+  if (apply && selected.includes("pulse")) {
+    const prepared = preparePulse(ctx);
+    if (!prepared.ok) {
+      console.log(JSON.stringify({ ok: false, error: prepared.error }, null, 2));
+      process.exit(1);
+    }
+  }
 
   const results = selected.map((c) => deploy(c, ctx));
   // A blocked component (prereq absent, nothing written) is a FAILURE, not a

@@ -15,8 +15,9 @@
  */
 
 import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
-import { detectDevTree, mergeHooks } from "./InstallEngine";
+import { defaultConfigRoot, detectDevTree, mergeHooks } from "./InstallEngine";
 
 interface Args { configRoot: string; skillRoot: string; apply: boolean; allowDev: boolean; }
 
@@ -26,9 +27,9 @@ function parseArgs(): Args {
     const i = a.indexOf(flag);
     return i >= 0 && a[i + 1] && !a[i + 1].startsWith("--") ? a[i + 1] : undefined;
   };
-  const home = process.env.HOME || "";
+  const home = homedir();
   return {
-    configRoot: get("--config-root") || process.env.CLAUDE_CONFIG_DIR || join(home, ".claude"),
+    configRoot: get("--config-root") || defaultConfigRoot(home),
     skillRoot: get("--skill-root") || join(import.meta.dir, ".."),
     apply: a.includes("--apply"),
     allowDev: a.includes("--allow-dev"),
@@ -46,6 +47,26 @@ function countFilesRec(dir: string): number {
   return n;
 }
 
+function relocateHookCommands(value: unknown, configRoot: string): unknown {
+  if (Array.isArray(value)) return value.map((entry) => relocateHookCommands(entry, configRoot));
+  if (value === null || typeof value !== "object") return value;
+  const result: Record<string, unknown> = {};
+  const portableRoot = configRoot.replace(/\\/g, "/");
+  const relocateCommand = (command: string): string =>
+    command.replace(/(?:\$HOME|\$\{HOME\}|~)\/\.claude(?<suffix>\/[^\s"';&|]*)?/g, (_match, suffix = "") => {
+      const token = `${portableRoot}${suffix}`;
+      return /\s/.test(token) ? JSON.stringify(token) : token;
+    });
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    if (key === "command" && typeof entry === "string") {
+      result[key] = relocateCommand(entry);
+    } else {
+      result[key] = relocateHookCommands(entry, configRoot);
+    }
+  }
+  return result;
+}
+
 function main(): void {
   const { configRoot, skillRoot, apply, allowDev } = parseArgs();
 
@@ -59,7 +80,10 @@ function main(): void {
     console.log(JSON.stringify({ ok: false, error: `payload hooks.json not found at ${hooksJsonPath}` }, null, 2));
     process.exit(1);
   }
-  const incoming = JSON.parse(readFileSync(hooksJsonPath, "utf-8"))?.hooks ?? {};
+  const incoming = relocateHookCommands(
+    JSON.parse(readFileSync(hooksJsonPath, "utf-8"))?.hooks ?? {},
+    configRoot,
+  ) as Record<string, never>;
 
   // The hook SCRIPTS (*.hook.ts|sh + lib/**) live beside hooks.json in the payload.
   // Merging hooks.json into settings.json wires commands that point at these files,
@@ -73,7 +97,16 @@ function main(): void {
   const settingsPath = join(configRoot, "settings.json");
   let settings: Record<string, unknown> = {};
   if (existsSync(settingsPath)) {
-    try { settings = JSON.parse(readFileSync(settingsPath, "utf-8")); } catch { settings = {}; }
+    try {
+      settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as Record<string, unknown>;
+    } catch (error) {
+      console.log(JSON.stringify({
+        ok: false,
+        error: `existing settings.json is invalid; refusing to replace it: ${error instanceof Error ? error.message : String(error)}`,
+        settingsPath,
+      }, null, 2));
+      process.exit(1);
+    }
   }
   const existingHooks = (settings.hooks && typeof settings.hooks === "object" ? settings.hooks : {}) as Record<string, never>;
 

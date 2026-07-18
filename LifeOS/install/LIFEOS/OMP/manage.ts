@@ -16,19 +16,23 @@
 import { existsSync, readFileSync, writeFileSync, copyFileSync, lstatSync, readlinkSync, symlinkSync, unlinkSync, renameSync, mkdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, dirname } from "node:path";
+import { pathToFileURL } from "node:url";
 import { parse, stringify } from "yaml";
 
 const HOME = homedir();
 const SELF_DIR = import.meta.dir; // …/.claude/LIFEOS/OMP
-const LIFEOS_DIR = dirname(SELF_DIR); // …/.claude/LIFEOS
+const LIFEOS_DIR = process.env.LIFEOS_DIR ?? dirname(SELF_DIR); // deployed runtime, overridable for isolated tests
+const CONFIG_ROOT = process.env.LIFEOS_CONFIG_ROOT ?? process.env.CLAUDE_CONFIG_DIR ?? dirname(LIFEOS_DIR);
+const HOOKS_DIR = join(CONFIG_ROOT, "hooks");
 const AGENT_DIR = process.env.PI_CODING_AGENT_DIR ?? join(HOME, ".omp", "agent");
 const CONFIG_PATH = join(AGENT_DIR, "config.yml");
 const APPEND_LINK = join(AGENT_DIR, "APPEND_SYSTEM.md");
 const APPEND_SRC = join(SELF_DIR, "APPEND_SYSTEM.md");
 const APPEND_BAK = `${APPEND_LINK}.pre-lifeos.bak`;
+const APPEND_COPY_MARKER = `${APPEND_LINK}.lifeos-copy`;
 // Legacy (pre-7.x mode system) marker — cleared if found; nothing writes it anymore.
 const LEGACY_MODES_MARKER = join(AGENT_DIR, "lifeos-modes.on");
-const INFERENCE_BACKEND_FILE = join(HOME, ".claude", "LIFEOS", "USER", "CONFIG", "inference-backend");
+const INFERENCE_BACKEND_FILE = join(LIFEOS_DIR, "USER", "CONFIG", "inference-backend");
 
 const EXTENSION_NAMES = ["lifeos-memory", "lifeos-commands", "lifeos-safety", "lifeos-hooks", "lifeos-observability"];
 
@@ -41,15 +45,24 @@ const EXTENSION_PATHS = EXTENSION_NAMES.map((name) => tildify(join(SELF_DIR, "ex
 
 function readConfig(): Record<string, unknown> {
 	if (!existsSync(CONFIG_PATH)) return {};
-	const parsed: unknown = parse(readFileSync(CONFIG_PATH, "utf8"));
-	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return {};
-	// Runtime-verified object shape; treat as a string-keyed config map.
+	let parsed: unknown;
+	try {
+		parsed = parse(readFileSync(CONFIG_PATH, "utf8"));
+	} catch (error) {
+		throw new Error(`invalid OMP config at ${CONFIG_PATH}; refusing mutation: ${error instanceof Error ? error.message : String(error)}`);
+	}
+	if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+		throw new Error(`invalid OMP config at ${CONFIG_PATH}; expected a YAML mapping`);
+	}
 	return parsed as Record<string, unknown>;
 }
 
 function writeConfig(config: Record<string, unknown>): void {
+	mkdirSync(AGENT_DIR, { recursive: true });
 	if (existsSync(CONFIG_PATH)) copyFileSync(CONFIG_PATH, `${CONFIG_PATH}.lifeos-bak`);
-	writeFileSync(CONFIG_PATH, stringify(config), "utf8");
+	const temp = `${CONFIG_PATH}.lifeos-tmp-${process.pid}`;
+	writeFileSync(temp, stringify(config), "utf8");
+	renameSync(temp, CONFIG_PATH);
 }
 
 function currentExtensions(config: Record<string, unknown>): string[] {
@@ -66,6 +79,43 @@ function isOurLink(): boolean {
 		return false;
 	}
 }
+function isOurCopy(): boolean {
+	try {
+		return pathExists(APPEND_LINK)
+			&& readFileSync(APPEND_COPY_MARKER, "utf8") === APPEND_SRC;
+	} catch {
+		return false;
+	}
+}
+
+function constitutionState(): "linked" | "copied" | "absent" {
+	if (isOurLink()) return "linked";
+	if (isOurCopy()) return "copied";
+	return "absent";
+}
+
+function installConstitution(): void {
+	const state = constitutionState();
+	if (state === "linked") {
+		console.log("• APPEND_SYSTEM.md already linked");
+		return;
+	}
+	if (state === "copied") {
+		copyFileSync(APPEND_SRC, APPEND_LINK);
+		console.log("• APPEND_SYSTEM.md managed copy refreshed");
+		return;
+	}
+	if (pathExists(APPEND_LINK)) renameSync(APPEND_LINK, APPEND_BAK);
+	try {
+		symlinkSync(APPEND_SRC, APPEND_LINK);
+		if (pathExists(APPEND_COPY_MARKER)) unlinkSync(APPEND_COPY_MARKER);
+		console.log(`• linked APPEND_SYSTEM.md -> ${tildify(APPEND_SRC)}`);
+	} catch {
+		copyFileSync(APPEND_SRC, APPEND_LINK);
+		writeFileSync(APPEND_COPY_MARKER, APPEND_SRC, "utf8");
+		console.log("• copied APPEND_SYSTEM.md (symlink unavailable)");
+	}
+}
 
 function pathExists(path: string): boolean {
 	try {
@@ -76,47 +126,66 @@ function pathExists(path: string): boolean {
 	}
 }
 
-function verifySource(): string[] {
+async function verifySource(): Promise<string[]> {
 	const problems: string[] = [];
 	if (!existsSync(APPEND_SRC)) problems.push(`missing constitution: ${APPEND_SRC}`);
 	for (const name of EXTENSION_NAMES) {
-		if (!existsSync(join(SELF_DIR, "extensions", name, "index.ts"))) problems.push(`missing extension: ${name}/index.ts`);
+		const entry = join(SELF_DIR, "extensions", name, "index.ts");
+		if (!existsSync(entry)) {
+			problems.push(`missing extension: ${name}/index.ts`);
+			continue;
+		}
+		try {
+			const extension = await import(pathToFileURL(entry).href);
+			if (name === "lifeos-hooks") {
+				const required = extension.REQUIRED_HOOK_FILES;
+				if (!Array.isArray(required)) {
+					problems.push("lifeos-hooks does not expose its required hook manifest");
+				} else {
+					for (const file of required) {
+						if (typeof file !== "string" || !existsSync(join(HOOKS_DIR, file))) {
+							problems.push(`missing bridged hook: ${String(file)}`);
+						}
+					}
+				}
+			}
+		} catch (error) {
+			problems.push(`extension failed to load: ${name} (${error instanceof Error ? error.message : String(error)})`);
+		}
 	}
 	const reviewer = join(LIFEOS_DIR, "TOOLS", "MemoryReviewer.ts");
-	if (existsSync(reviewer) && !readFileSync(reviewer, "utf8").includes("OMP_SESSIONS_DIR")) {
+	if (!existsSync(reviewer)) {
+		problems.push(`missing tool patch: ${reviewer}`);
+	} else if (!readFileSync(reviewer, "utf8").includes("OMP_SESSIONS_DIR")) {
 		problems.push("MemoryReviewer.ts lacks the OMP session-store patch (autonomic loop will read CC transcripts only)");
 	}
 	const parser = join(LIFEOS_DIR, "TOOLS", "TranscriptParser.ts");
-	// UAI's parser handles OMP via the nested { message: { role, content } } branch in
-	// textMessageFromEntry/isRealUserPrompt (upstream LifeOS uses normalizeEntry instead).
-	if (existsSync(parser) && !/message\?\.role|normalizeEntry/.test(readFileSync(parser, "utf8"))) {
+	if (!existsSync(parser)) {
+		problems.push(`missing tool patch: ${parser}`);
+	} else if (!/message\?\.role|normalizeEntry/.test(readFileSync(parser, "utf8"))) {
 		problems.push("TranscriptParser.ts lacks the OMP-format patch (Stop hooks will no-op on OMP transcripts)");
 	}
 	return problems;
 }
 
-function install(): void {
-	const problems = verifySource();
+async function install(): Promise<void> {
+	const problems = await verifySource();
 	if (problems.length > 0) {
 		console.error("✗ Source not ready — the LifeOS/OMP tree is incomplete on this machine:");
 		for (const p of problems) console.error(`  - ${p}`);
 		process.exit(1);
 	}
+	const config = readConfig();
 
 	// A fresh OMP profile may not have created its agent directory yet.
 	mkdirSync(AGENT_DIR, { recursive: true });
 
-	// 1) Symlink the constitution, backing up a pre-existing non-LifeOS file.
-	if (isOurLink()) {
-		console.log("• APPEND_SYSTEM.md already linked");
-	} else {
-		if (pathExists(APPEND_LINK)) renameSync(APPEND_LINK, APPEND_BAK);
-		symlinkSync(APPEND_SRC, APPEND_LINK);
-		console.log(`• linked APPEND_SYSTEM.md -> ${tildify(APPEND_SRC)}`);
-	}
+	// 1) Install the constitution, backing up a pre-existing non-LifeOS file.
+	// Windows profiles without symlink privileges receive a managed copy.
+	installConstitution();
 
 	// 2) Merge the extensions into config.extensions (dedup, preserve everything else).
-	const config = readConfig();
+	// Existing config was parsed before any symlink or file mutation.
 	const existing = currentExtensions(config);
 	const merged = [...existing];
 	let added = 0;
@@ -143,17 +212,18 @@ function uninstall(): void {
 		console.log(`• config.yml extensions: LifeOS entries removed (${kept.length} non-LifeOS kept)`);
 	}
 
-	// 2) Remove our symlink; restore any backed-up original.
-	if (isOurLink()) {
+	// 2) Remove our linked/copied constitution; restore any backed-up original.
+	if (constitutionState() !== "absent") {
 		unlinkSync(APPEND_LINK);
+		if (pathExists(APPEND_COPY_MARKER)) unlinkSync(APPEND_COPY_MARKER);
 		if (pathExists(APPEND_BAK)) {
 			renameSync(APPEND_BAK, APPEND_LINK);
 			console.log("• restored pre-LifeOS APPEND_SYSTEM.md from backup");
 		} else {
-			console.log("• removed APPEND_SYSTEM.md symlink");
+			console.log("• removed APPEND_SYSTEM.md");
 		}
 	} else {
-		console.log("• APPEND_SYSTEM.md not our symlink — left untouched");
+		console.log("• APPEND_SYSTEM.md not managed by LifeOS — left untouched");
 	}
 
 	// 3) Clear the legacy mode-system marker if a pre-7.x install left one behind.
@@ -164,14 +234,14 @@ function uninstall(): void {
 	console.log("\n✓ Uninstalled the wiring. The LIFEOS/OMP tree + additive tool patches remain (harmless).");
 }
 
-function status(): void {
+async function status(): Promise<void> {
 	const config = readConfig();
 	const wired = new Set(currentExtensions(config));
 	console.log(`agent dir: ${AGENT_DIR}`);
-	console.log(`constitution symlink: ${isOurLink() ? "✓ linked" : "✗ not linked"}`);
+	console.log(`constitution: ${constitutionState() === "absent" ? "✗ not installed" : `✓ ${constitutionState()}`}`);
 	console.log("extensions:");
 	for (const path of EXTENSION_PATHS) console.log(`  ${wired.has(path) ? "✓" : "✗"} ${path}`);
-	const problems = verifySource();
+	const problems = await verifySource();
 	if (problems.length > 0) {
 		console.log("source warnings:");
 		for (const p of problems) console.log(`  ! ${p}`);
@@ -226,9 +296,9 @@ function inferenceBackend(state: string): void {
 }
 
 const command = process.argv[2];
-if (command === "install") install();
+if (command === "install") await install();
 else if (command === "uninstall") uninstall();
-else if (command === "status") status();
+else if (command === "status") await status();
 else if (command === "modes") {
 	console.error("`modes` was removed — upstream 7.0.0 retired the mode system (one unified format). Nothing to toggle.");
 	process.exit(2);

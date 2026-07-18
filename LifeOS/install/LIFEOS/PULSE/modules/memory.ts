@@ -28,19 +28,19 @@ import {
   statSync,
 } from "node:fs";
 import { join } from "node:path";
+import { getLifeosDir } from "../../TOOLS/lib/paths";
 
-const HOME = process.env.HOME || "";
-const CLAUDE = join(HOME, ".claude");
-const OBS_DIR = join(CLAUDE, "LIFEOS/MEMORY/OBSERVABILITY");
+const LIFEOS_DIR = getLifeosDir();
+const OBS_DIR = join(LIFEOS_DIR, "MEMORY", "OBSERVABILITY");
 
 const REVIEW_STATE = join(OBS_DIR, "review-state.json");
 const HEALTH_LOG = join(OBS_DIR, "memory-health.jsonl");
 const FIRES_LOG = join(OBS_DIR, "reviewer-fires.jsonl");
 const PROPOSALS_LOG = join(OBS_DIR, "pending-proposals.jsonl");
 const REVIEWER_RUNS = join(OBS_DIR, "reviewer-runs");
-const PRINCIPAL_MEMORY = join(CLAUDE, "LIFEOS/USER/PRINCIPAL/PRINCIPAL_MEMORY.md");
-const DA_MEMORY = join(CLAUDE, "LIFEOS/USER/DIGITAL_ASSISTANT/DA_MEMORY.md");
-const CADENCE_CONFIG = join(CLAUDE, "LIFEOS/USER/CONFIG/memory-review.json");
+const PRINCIPAL_MEMORY = join(LIFEOS_DIR, "USER", "PRINCIPAL", "PRINCIPAL_MEMORY.md");
+const DA_MEMORY = join(LIFEOS_DIR, "USER", "DIGITAL_ASSISTANT", "DA_MEMORY.md");
+const CADENCE_CONFIG = join(LIFEOS_DIR, "USER", "CONFIG", "memory-review.json");
 
 interface ModuleState {
   running: boolean;

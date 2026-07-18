@@ -20,6 +20,7 @@
 import { existsSync, statSync } from "node:fs";
 import { resolve } from "node:path";
 import { homedir } from "node:os";
+import { getLifeosDir } from "./lib/paths";
 
 // Expand leading `~` (and `~/`) to the user's home directory. node:fs APIs do
 // not expand tildes, so any path returned from this loader must be absolute.
@@ -85,12 +86,12 @@ export interface LifeosConfig {
 // ─────────── Resolution ───────────
 
 const DEFAULT_HOME = process.env.HOME || homedir();
-const DEFAULT_CONFIG_PATH = resolve(DEFAULT_HOME, ".claude/LIFEOS/USER/CONFIG/LIFEOS_CONFIG.toml");
+const DEFAULT_CONFIG_PATH = resolve(getLifeosDir(), "USER/CONFIG/LIFEOS_CONFIG.toml");
 
 let cache: { config: LifeosConfig; mtime: number; path: string } | null = null;
 
 export function loadLifeosConfig(opts: { path?: string; force?: boolean } = {}): LifeosConfig {
-  const path = opts.path ?? process.env.LIFEOS_CONFIG_PATH ?? DEFAULT_CONFIG_PATH;
+  const path = expandHome(opts.path ?? process.env.LIFEOS_CONFIG_PATH ?? DEFAULT_CONFIG_PATH);
 
   if (!existsSync(path)) {
     throw new Error(
@@ -133,7 +134,7 @@ export function paiUserDir(): string {
   try {
     return loadLifeosConfig().paths.userDir;
   } catch {
-    return resolve(DEFAULT_HOME, ".claude/LIFEOS/USER");
+    return resolve(getLifeosDir(), "USER");
   }
 }
 
@@ -188,10 +189,10 @@ function validateAndNormalize(raw: unknown, path: string): LifeosConfig {
     },
     paths: {
       userDir: expandHome(
-        root.paths?.userDir ?? root.paths?.user_dir ?? resolve(DEFAULT_HOME, ".claude/LIFEOS/USER"),
+        root.paths?.userDir ?? root.paths?.user_dir ?? resolve(getLifeosDir(), "USER"),
       ),
       memoryDir: expandHome(
-        root.paths?.memoryDir ?? root.paths?.memory_dir ?? resolve(DEFAULT_HOME, ".claude/LIFEOS/MEMORY"),
+        root.paths?.memoryDir ?? root.paths?.memory_dir ?? resolve(getLifeosDir(), "MEMORY"),
       ),
       projectsDir: expandHome(
         root.paths?.projectsDir ?? root.paths?.projects_dir ?? resolve(DEFAULT_HOME, "Projects"),

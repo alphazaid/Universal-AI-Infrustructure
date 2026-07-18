@@ -20,7 +20,7 @@ for (const __k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
 import { execFileSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { detectDevTree } from "./InstallEngine";
+import { defaultConfigRoot, detectDevTree } from "./InstallEngine";
 
 // Normalize env path vars that Claude Code injects without shell expansion (LifeOS#1404)
 for (const k of ["LIFEOS_DIR", "LIFEOS_CONFIG_DIR", "PROJECTS_DIR"]) {
@@ -38,8 +38,8 @@ function main(): void {
     return i >= 0 && a[i + 1] && !a[i + 1].startsWith("--") ? a[i + 1] : undefined;
   };
   const home = process.env.HOME || "";
-  const configRoot = get("--config-root") || process.env.CLAUDE_CONFIG_DIR || join(home, ".claude");
-  const configDir = get("--config-dir") || process.env.LIFEOS_CONFIG_DIR || join(home, ".config", "LIFEOS");
+  const configRoot = get("--config-root") || defaultConfigRoot(home);
+  const configDir = get("--config-dir") || process.env.LIFEOS_USER_CONFIG_DIR || join(home, ".config", "LIFEOS");
   const apply = a.includes("--apply");
   const allowDev = a.includes("--allow-dev");
 
@@ -66,7 +66,7 @@ function main(): void {
   const failed: Array<{ tool: string; error: string }> = [];
   for (const g of present) {
     try {
-      execFileSync("bun", [join(toolsDir, g)], {
+      execFileSync(Bun.which("bun") || process.execPath, [join(toolsDir, g)], {
         stdio: "pipe",
         env: {
           ...process.env,
@@ -82,7 +82,8 @@ function main(): void {
       });
       ran.push(g);
     } catch (err) {
-      failed.push({ tool: g, error: err instanceof Error ? err.message : String(err) });
+      const statusValue = err !== null && typeof err === "object" && "status" in err ? err.status : undefined;
+      failed.push({ tool: g, error: `generator exited ${statusValue === undefined || statusValue === null ? "unknown" : String(statusValue)}; process output withheld` });
     }
   }
   // Fail LOUD when nothing was actually seeded: an empty `present` set (no

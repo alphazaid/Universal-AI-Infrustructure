@@ -2,7 +2,23 @@
 # LifeOS Pulse — Process Management
 # Usage: manage.sh {start|stop|restart|status|install|uninstall}
 
-PULSE_DIR="$HOME/.claude/LIFEOS/PULSE"
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+INSTALLED_LIFEOS_ROOT="$(dirname -- "$SCRIPT_DIR")"
+
+if [ -n "${LIFEOS_DIR:-}" ]; then
+  LIFEOS_ROOT="$LIFEOS_DIR"
+  CONFIG_ROOT="${LIFEOS_CONFIG_ROOT:-${CLAUDE_CONFIG_DIR:-$(dirname -- "$LIFEOS_ROOT")}}"
+elif [ -n "${LIFEOS_CONFIG_ROOT:-}" ]; then
+  CONFIG_ROOT="$LIFEOS_CONFIG_ROOT"
+  LIFEOS_ROOT="$CONFIG_ROOT/LIFEOS"
+elif [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then
+  CONFIG_ROOT="$CLAUDE_CONFIG_DIR"
+  LIFEOS_ROOT="$CONFIG_ROOT/LIFEOS"
+else
+  LIFEOS_ROOT="$INSTALLED_LIFEOS_ROOT"
+  CONFIG_ROOT="$(dirname -- "$LIFEOS_ROOT")"
+fi
+PULSE_DIR="$LIFEOS_ROOT/PULSE"
 PLIST_NAME="com.lifeos.pulse"
 PLIST_SRC="$PULSE_DIR/$PLIST_NAME.plist"
 PLIST_DST="$HOME/Library/LaunchAgents/$PLIST_NAME.plist"
@@ -18,14 +34,21 @@ STATE_FILE="$PULSE_DIR/state/state.json"
 # install` (the child shell has its own PATH). That path is ephemeral and
 # the launchd job would fail on next boot. Prefer the canonical install
 # locations and fall back to `command -v bun` only if neither exists.
-if [ -x "$HOME/.bun/bin/bun" ]; then
+DISCOVERED_BUN="$(command -v bun 2>/dev/null || true)"
+if [ -n "$DISCOVERED_BUN" ] && [ -x "$DISCOVERED_BUN" ] &&
+   ! printf '%s' "$DISCOVERED_BUN" | grep -Eq '^(/private)?/tmp/'; then
+  BUN_PATH="$DISCOVERED_BUN"
+elif [ -x "$HOME/.bun/bin/bun" ]; then
   BUN_PATH="$HOME/.bun/bin/bun"
 elif [ -x "/opt/homebrew/bin/bun" ]; then
   BUN_PATH="/opt/homebrew/bin/bun"
 elif [ -x "/usr/local/bin/bun" ]; then
   BUN_PATH="/usr/local/bin/bun"
+elif [ -x "/usr/bin/bun" ]; then
+  BUN_PATH="/usr/bin/bun"
 else
-  BUN_PATH="$(command -v bun || echo "$HOME/.bun/bin/bun")"
+  echo "ERROR: bun not found; install bun and re-run." >&2
+  exit 1
 fi
 
 # OS detection — Linux uses systemd --user, macOS uses launchctl.
@@ -34,19 +57,49 @@ SERVICE_SRC="$PULSE_DIR/$PLIST_NAME.service"
 SYSTEMD_SERVICE_DIR="$HOME/.config/systemd/user"
 SERVICE_DST="$SYSTEMD_SERVICE_DIR/$PLIST_NAME.service"
 
+materialize_service() {
+  sed \
+    -e "s|__HOME__/.claude/LIFEOS|$LIFEOS_ROOT|g" \
+    -e "s|__HOME__/.claude|$CONFIG_ROOT|g" \
+    -e "s|__HOME__|$HOME|g" \
+    -e "s|__CONFIG_ROOT__|$CONFIG_ROOT|g" \
+    -e "s|__LIFEOS_DIR__|$LIFEOS_ROOT|g" \
+    -e "s|__BUN_PATH__|$BUN_PATH|g" \
+    "$1" > "$2"
+}
+
+wait_for_pulse() {
+  for _ in $(seq 1 60); do
+    sleep 0.5
+    if curl -fsS --max-time 1 -o /dev/null http://localhost:31337/healthz 2>/dev/null; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 case "$1" in
   start)
     if [ "$OS" = "Linux" ]; then
-      systemctl --user start "$PLIST_NAME"
+      if ! systemctl --user start "$PLIST_NAME"; then
+        echo "ERROR: failed to start LifeOS Pulse with systemd." >&2
+        exit 1
+      fi
       echo "LifeOS Pulse started"
     else
       if [ ! -f "$PLIST_DST" ]; then
         # Substitute __HOME__ + __BUN_PATH__ placeholders (public template);
         # no-op on plists that already have literal paths.
-        sed -e "s|__HOME__|$HOME|g" -e "s|__BUN_PATH__|$BUN_PATH|g" "$PLIST_SRC" > "$PLIST_DST"
+        materialize_service "$PLIST_SRC" "$PLIST_DST"
       fi
-      launchctl load "$PLIST_DST" 2>/dev/null
-      echo "LifeOS Pulse started"
+      if launchctl list "$PLIST_NAME" >/dev/null 2>&1; then
+        echo "LifeOS Pulse already started"
+      elif launchctl load "$PLIST_DST"; then
+        echo "LifeOS Pulse started"
+      else
+        echo "ERROR: failed to load LifeOS Pulse launch agent at $PLIST_DST." >&2
+        exit 1
+      fi
     fi
     ;;
 
@@ -94,7 +147,7 @@ case "$1" in
     if [ -f "$STATE_FILE" ]; then
       echo ""
       echo "Last job runs:"
-      bun -e "
+      "$BUN_PATH" -e "
         const state = JSON.parse(require('fs').readFileSync('$STATE_FILE', 'utf-8'));
         for (const [name, info] of Object.entries(state.jobs)) {
           const ago = Math.round((Date.now() - info.lastRun) / 60000);
@@ -107,6 +160,18 @@ case "$1" in
 
   install)
     mkdir -p "$PULSE_DIR/state" "$PULSE_DIR/logs"
+    if ! (cd "$PULSE_DIR" && "$BUN_PATH" install --frozen-lockfile); then
+      echo "ERROR: failed to install Pulse runtime dependencies." >&2
+      exit 1
+    fi
+    if [ -f "$PULSE_DIR/Observability/package.json" ]; then
+      if ! (cd "$PULSE_DIR/Observability" &&
+            "$BUN_PATH" install --frozen-lockfile &&
+            "$BUN_PATH" run build); then
+        echo "ERROR: failed to install/build Pulse Observability." >&2
+        exit 1
+      fi
+    fi
 
     if [ "$OS" = "Linux" ]; then
       mkdir -p "$SYSTEMD_SERVICE_DIR"
@@ -118,7 +183,7 @@ case "$1" in
       sleep 1
       # Substitute __HOME__ + __BUN_PATH__ placeholders (public template);
       # no-op on service files that already have literal paths.
-      sed -e "s|__HOME__|$HOME|g" -e "s|__BUN_PATH__|$BUN_PATH|g" "$SERVICE_SRC" > "$SERVICE_DST"
+      materialize_service "$SERVICE_SRC" "$SERVICE_DST"
       # Ensure user services survive logout/reboot (no-op if already enabled)
       loginctl enable-linger "$USER" 2>/dev/null || true
       systemctl --user daemon-reload
@@ -136,23 +201,28 @@ case "$1" in
 
       # Substitute __HOME__ + __BUN_PATH__ placeholders (public template);
       # no-op on plists that already have literal paths.
-      sed -e "s|__HOME__|$HOME|g" -e "s|__BUN_PATH__|$BUN_PATH|g" "$PLIST_SRC" > "$PLIST_DST"
+      materialize_service "$PLIST_SRC" "$PLIST_DST"
       launchctl load "$PLIST_DST"
     fi
 
-    # Verify pulse actually binds :31337 within 10s. Fail loud if not — prior
-    # behavior was silent success even when the daemon never came up.
-    for _ in $(seq 1 20); do
-      sleep 0.5
-      if curl -sS --max-time 1 -o /dev/null -X POST http://localhost:31337/notify \
-           -H "Content-Type: application/json" \
-           -d '{"message":"","voice_enabled":false}' 2>/dev/null; then
-        echo "LifeOS Pulse installed and verified on port 31337 (bun: $BUN_PATH)"
-        exit 0
-      fi
-    done
+    # Verify the service. A slow first boot gets one explicit restart and retry.
+    if wait_for_pulse; then
+      echo "LifeOS Pulse installed and verified on port 31337 (bun: $BUN_PATH)"
+      exit 0
+    fi
 
-    echo "ERROR: LifeOS Pulse installed but port 31337 did not bind within 10s." >&2
+    echo "Pulse did not bind on the first attempt; restarting once before failing." >&2
+    if [ "$OS" = "Linux" ]; then
+      systemctl --user restart "$PLIST_NAME" 2>/dev/null || true
+    else
+      launchctl kickstart -k "gui/$(id -u)/$PLIST_NAME" 2>/dev/null || true
+    fi
+    if wait_for_pulse; then
+      echo "LifeOS Pulse installed and verified after one restart (bun: $BUN_PATH)"
+      exit 0
+    fi
+
+    echo "ERROR: LifeOS Pulse installed but port 31337 did not bind after two 30s attempts." >&2
     echo "  Check: tail -50 $PULSE_DIR/logs/pulse-stderr.log" >&2
     exit 1
     ;;

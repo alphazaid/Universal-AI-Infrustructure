@@ -14,10 +14,20 @@ import { join } from "path";
 import { spawnSync } from "child_process";
 
 const HOME = process.env.HOME || "";
-const TEMPLATE = join(HOME, ".claude", "LIFEOS", "TOOLS", "com.lifeos.commitmentsweep.plist.template");
+const CONFIG_ROOT = process.env.LIFEOS_CONFIG_ROOT || process.env.CLAUDE_CONFIG_DIR || join(HOME, ".claude");
+const LIFEOS = process.env.LIFEOS_DIR || join(CONFIG_ROOT, "LIFEOS");
+
+function relocateProfile(plist: string): string {
+  return plist
+    .replaceAll(join(HOME, ".claude", "LIFEOS"), LIFEOS)
+    .replaceAll(join(HOME, ".claude"), CONFIG_ROOT)
+    .replaceAll("{{CONFIG_ROOT}}", CONFIG_ROOT)
+    .replaceAll("{{LIFEOS_DIR}}", LIFEOS);
+}
+const TEMPLATE = join(LIFEOS, "TOOLS", "com.lifeos.commitmentsweep.plist.template");
 const TARGET_DIR = join(HOME, "Library", "LaunchAgents");
 const TARGET = join(TARGET_DIR, "com.lifeos.commitmentsweep.plist");
-const STATE_DIR = join(HOME, ".claude", "LIFEOS", "MEMORY", "STATE");
+const STATE_DIR = join(LIFEOS, "MEMORY", "STATE");
 const LABEL = "com.lifeos.commitmentsweep";
 
 function uid(): string {
@@ -51,7 +61,7 @@ function install(): void {
 
   const raw = readFileSync(TEMPLATE, "utf8");
   const materialized = raw.replaceAll("__HOME__", HOME);
-  writeFileSync(TARGET, materialized, { mode: 0o644 });
+  writeFileSync(TARGET, relocateProfile(materialized), { mode: 0o644 });
   console.log(`[InstallCommitmentSweep] wrote ${TARGET}`);
 
   // Bootout first in case an old version is loaded

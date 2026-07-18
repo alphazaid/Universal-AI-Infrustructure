@@ -42,6 +42,9 @@ describe("LifeOS depth indicator", () => {
 			};
 
 			expect(extension.workSlugFromToolEvent(event)).toBe("current-session");
+			expect(extension.workSlugFromToolEvent({
+				input: { path: "C:\\Users\\test\\MEMORY\\WORK\\windows-session\\ISA.md" },
+			})).toBe("windows-session");
 			expect(extension.depthTagForSession("current-session", workJson)).toBe(" · ALGO execute E3");
 			expect(extension.depthTagForSession("completed-session", workJson)).toBe(" · DIRECT");
 			expect(extension.depthTagForSession("", workJson)).toBe(" · DIRECT");
