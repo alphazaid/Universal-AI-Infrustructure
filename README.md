@@ -41,9 +41,9 @@
 
 <!-- Content -->
 [![Get Started](https://img.shields.io/badge/🚀_Get_Started-Install-22C55E?style=flat)](#-installation)
-[![Release v5.0.0](https://img.shields.io/badge/📦_Release-v5.0.0-8B5CF6?style=flat)](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/)
-[![Algorithm v6.3.0](https://img.shields.io/badge/Algorithm-v6.3.0-D97706?style=flat)](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/.claude/PAI/ALGORITHM/v6.3.0.md)
-[![Pulse](https://img.shields.io/badge/Pulse-included-3B82F6?style=flat)](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/.claude/PAI/PULSE/)
+[![LifeOS v7.1.1](https://img.shields.io/badge/LifeOS-v7.1.1-8B5CF6?style=flat)](LifeOS/)
+[![Algorithm v8.4.0](https://img.shields.io/badge/Algorithm-v8.4.0-D97706?style=flat)](LifeOS/install/LIFEOS/ALGORITHM/v8.4.0.md)
+[![Pulse](https://img.shields.io/badge/Pulse-included-3B82F6?style=flat)](LifeOS/install/LIFEOS/PULSE/)
 [![Contributors](https://img.shields.io/github/contributors/jSydorowicz21/Universal-AI-Infrustructure?style=flat&logo=githubsponsors&logoColor=white&label=Contributors&color=EC4899)](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/graphs/contributors)
 
 <!-- Tech Stack -->
@@ -56,7 +56,7 @@
 
 **Overview:** [What PAI Is](#what-pai-is) · [Principles](#principles) · [Features](#features)
 
-**Get Started:** [Installation](#-installation) · [Releases](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/) · [Packs](Packs/)
+**Get Started:** [Installation](#-installation) · [Packs](Packs/)
 
 **Resources:** [FAQ](#-faq) · [Roadmap](#-roadmap) · [Community](#-community) · [Contributing](#-contributing)
 
@@ -80,18 +80,14 @@
 - **License:** MIT, unchanged. Daniel's original copyright notice is preserved in [LICENSE](LICENSE), exactly as MIT requires.
 - **Not official:** UAI is an independent fork and is **not affiliated with, sponsored by, or endorsed by** Daniel Miessler. For the canonical project, see the [upstream repository](https://github.com/danielmiessler/Personal_AI_Infrastructure).
 
-Most documentation below is inherited from upstream PAI and describes the PAI system this fork is built on. Internal identifiers, paths (`~/.claude/PAI`, `$PAI_DIR`), and install scripts intentionally keep the `PAI` name for compatibility.
+Most documentation below is inherited from upstream PAI and describes the foundation this fork extends. The current runtime and installer use the `LifeOS/` tree; inherited prose may retain the PAI name when discussing its lineage.
 
 ---
 
 > [!IMPORTANT]
-> **PAI v5.0.0 — Life Operating System** — the biggest release in PAI history. PAI is no longer "AI scaffolding" — it's a **Life Operating System** with the unified **Pulse** daemon (Life Dashboard at `localhost:31337`), a **DA** (Digital Assistant) identity layer, **Algorithm v6.3.0** (Current State → Ideal State, seven phases, classifier-driven mode + tier), the **ISA** primitive (universal "ideal state" articulation), 45 skills, 171 workflows, 37 hooks, and structural privacy via containment zones.
+> **Current UAI runtime:** LifeOS v7.1.1, Algorithm v8.4.0, Pulse, and model-agnostic OMP integration. The historical `Releases/v5.0.0` bundle predates the current installer and does not contain the OMP integration.
 >
-> **[v5.0.0 release notes →](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/README.md)** | **[All releases →](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/)**
->
-> **One-line install:** `curl -sSL https://ourpai.ai/install.sh | bash`
->
-> Upgrading from v4.x? This is a different system, not a patch. Read the [migration guide](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/README.md#migration-guide-from-v4x) first.
+> Install from this repository's current `LifeOS/` checkout using the [installation instructions](#-installation).
 
 <div align="center">
 
@@ -108,15 +104,7 @@ PAI is a Life Operating System. It captures who you are, what you care about, an
 - **The DA** — your Digital Assistant. The voice and personality you talk to.
 
 It's designed for individuals first, but the same architecture works for teams, companies, or any entity that wants to articulate what it's trying to be and move toward it.
-Your AI reads the install page and walks the setup, asking permission before it touches anything.
-
-**Prefer the terminal?** There's a one-line shortcut for Claude Code on macOS/Linux:
-
-```bash
-curl -fsSL https://ourlifeos.ai/install.sh | bash
-```
-
-Either path needs a capable AI coding harness — we build and run on [Claude Code](https://docs.claude.com/claude-code) — and [bun](https://bun.sh).
+Start with the [current-checkout installation instructions](#-installation). They support Claude Code and OMP directly, preserve the selected harness profile, and keep every mutation permissioned and additive.
 
 ## Core Components
 
@@ -450,8 +438,8 @@ badosanjos · bnkath2o · brycemagera · catchingknives · DAESA24 · deleyva ·
 - **Containment + release tooling** — privacy is structural. `containment-zones.ts` declares every directory's privacy zone; `ContainmentGuard` PreToolUse hook blocks cross-zone leaks; 12 security gates run on every public release; two-stage release (stage → publish) never auto-chains.
 - **Memory v7.6** — structured by purpose: WORK (active task ISAs), KNOWLEDGE (typed graph: People, Companies, Ideas, Research, Blogs), LEARNING (meta-patterns), RELATIONSHIP (DA-Principal notes), OBSERVABILITY (every tool call + hook firing + satisfaction signal), STATE (session registry).
 - **45 public skills, 171 workflows, 37 hooks** — skills are self-activating composable domain units; hooks fire across SessionStart, UserPromptSubmit, PreToolUse, PostToolUse, Stop, SubagentStop, PreCompact, SessionEnd.
-- **One-line installer** — `curl -sSL https://ourpai.ai/install.sh | bash`. Auto-backs-up existing `~/.claude/`, runs the DA identity wizard, registers Pulse as a launchd service, validates.
-- [Full release notes + migration guide](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/README.md)
+- **Historical installer** — retired; current installations use the repository's `LifeOS/` checkout and the instructions above.
+- [Archived v5.0.0 release notes](https://github.com/jSydorowicz21/Universal-AI-Infrustructure/tree/68f501b23b2fc240331ffd698236c3bf8a50b57a/Releases/v5.0.0/README.md)
 
 **v4.0.3 (2026-03-01) — Community PR Patch**
 - JSON array parsing fix in Inference.ts

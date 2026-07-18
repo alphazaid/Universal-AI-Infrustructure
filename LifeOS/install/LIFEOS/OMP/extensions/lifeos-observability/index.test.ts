@@ -78,4 +78,108 @@ describe("LifeOS depth indicator", () => {
 			else process.env.LIFEOS_DIR = previousLifeosDir;
 		}
 	});
+
+	test("isolates counters and Algorithm state across concurrent OMP sessions", async () => {
+		const { lifeosDir } = createWorkState();
+		const previousLifeosDir = process.env.LIFEOS_DIR;
+		process.env.LIFEOS_DIR = lifeosDir;
+		try {
+			const extension = await import(`./index.ts?test=isolation-${Date.now()}`);
+			const handlers = new Map<string, (event: unknown, ctx: unknown) => unknown>();
+			extension.default({
+				on: (name: string, handler: (event: unknown, ctx: unknown) => unknown) => handlers.set(name, handler),
+				setLabel: () => undefined,
+				registerCommand: () => undefined,
+			});
+
+			let firstStatus = "";
+			let secondStatus = "";
+			const firstCtx = {
+				hasUI: true,
+				sessionManager: { getSessionId: () => "omp-session-one" },
+				ui: {
+					setStatus: (_key: string, value: string) => { firstStatus = value; },
+					setWidget: () => undefined,
+				},
+			};
+			const secondCtx = {
+				hasUI: true,
+				sessionManager: { getSessionId: () => "omp-session-two" },
+				ui: {
+					setStatus: (_key: string, value: string) => { secondStatus = value; },
+					setWidget: () => undefined,
+				},
+			};
+			const firstEvent = {
+				toolName: "edit",
+				input: { file_path: "/tmp/MEMORY/WORK/current-session/ISA.md" },
+			};
+			const secondEvent = {
+				toolName: "read",
+				input: { path: "/tmp/MEMORY/WORK/other-session/ISA.md" },
+			};
+
+			handlers.get("session_start")?.({}, firstCtx);
+			handlers.get("session_start")?.({}, secondCtx);
+			await handlers.get("tool_execution_end")?.(firstEvent, firstCtx);
+			await handlers.get("tool_execution_end")?.(firstEvent, firstCtx);
+			await handlers.get("tool_result")?.({
+				toolName: "edit",
+				isError: true,
+				content: [{ text: "first session failure" }],
+			}, firstCtx);
+			await handlers.get("tool_execution_end")?.(secondEvent, secondCtx);
+
+			expect(firstStatus).toBe("LifeOS · 🔧2 ✗1 · ALGO execute E3");
+			expect(secondStatus).toBe("LifeOS · 🔧1 · ALGO verify E5");
+
+			await handlers.get("session_shutdown")?.({}, firstCtx);
+			await handlers.get("session_start")?.({}, firstCtx);
+			expect(firstStatus).toBe("LifeOS · 🔧0 · DIRECT");
+			expect(secondStatus).toBe("LifeOS · 🔧1 · ALGO verify E5");
+		} finally {
+			if (previousLifeosDir === undefined) delete process.env.LIFEOS_DIR;
+			else process.env.LIFEOS_DIR = previousLifeosDir;
+		}
+	});
+
+	test("degrades the statusline command explicitly when bash is unavailable", async () => {
+		const { lifeosDir } = createWorkState();
+		const previousLifeosDir = process.env.LIFEOS_DIR;
+		process.env.LIFEOS_DIR = lifeosDir;
+		try {
+			const extension = await import(`./index.ts?test=no-bash-${Date.now()}`);
+			const commands = new Map<string, {
+				handler: (args: string | undefined, ctx: unknown) => unknown;
+			}>();
+			extension.default({
+				on: () => undefined,
+				setLabel: () => undefined,
+				registerCommand: (name: string, spec: {
+					handler: (args: string | undefined, ctx: unknown) => unknown;
+				}) => commands.set(name, spec),
+			}, { bash: null });
+
+			let notice = "";
+			let level = "";
+			let widgetCleared = false;
+			commands.get("statusline")?.handler("on", {
+				hasUI: true,
+				ui: {
+					setWidget: (_key: string, value: unknown) => { widgetCleared = value === undefined; },
+					notify: (message: string, severity: string) => {
+						notice = message;
+						level = severity;
+					},
+				},
+			});
+
+			expect(widgetCleared).toBe(true);
+			expect(level).toBe("warning");
+			expect(notice).toBe("LifeOS statusline unavailable: bash is not installed");
+		} finally {
+			if (previousLifeosDir === undefined) delete process.env.LIFEOS_DIR;
+			else process.env.LIFEOS_DIR = previousLifeosDir;
+		}
+	});
 });

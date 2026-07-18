@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { chmodSync, copyFileSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
-import { hookEnv, launchFireAndForgetHook } from "./index";
+import { createPulseAvailabilityProbe, hookEnv, launchFireAndForgetHook } from "./index";
 
 const tempDirs: string[] = [];
 function profileEnv(home: string, overrides: Record<string, string> = {}): Record<string, string> {
@@ -42,6 +42,26 @@ afterEach(() => {
 describe("Claude-free OMP inference", () => {
 	test("marks bridged hook subprocesses as OMP", () => {
 		expect(hookEnv({ cwd: "/tmp/project" }).LIFEOS_HARNESS).toBe("omp");
+	});
+	test("retries Pulse after an initial failed liveness probe", async () => {
+		let now = 0;
+		let attempts = 0;
+		const pulseAvailable = createPulseAvailabilityProbe({
+			now: () => now,
+			probe: async () => {
+				attempts++;
+				return attempts > 1;
+			},
+		});
+
+		expect(await pulseAvailable()).toBe(false);
+		expect(attempts).toBe(1);
+		expect(await pulseAvailable()).toBe(false);
+		expect(attempts).toBe(1);
+
+		now = 5001;
+		expect(await pulseAvailable()).toBe(true);
+		expect(attempts).toBe(2);
 	});
 	test("terminates fire-and-forget hooks at their declared timeout", async () => {
 		const home = mkdtempSync(join(tmpdir(), "lifeos-omp-hook-timeout-"));
@@ -139,11 +159,11 @@ describe("Claude-free OMP inference", () => {
 		expect(existsSync(configPath)).toBe(false);
 	});
 
-	test("installs into a missing OMP agent directory", async () => {
+	test("routes installation and status to the selected OMP profile", async () => {
 		const home = mkdtempSync(join(tmpdir(), "lifeos-manage-install-"));
 		tempDirs.push(home);
 		stageCorePrerequisites(home);
-		const agentDir = join(home, ".omp/agent");
+		const agentDir = join(home, "profiles", "work-agent");
 		const managePath = join(import.meta.dir, "../../manage.ts");
 		const env = profileEnv(home, { PI_CODING_AGENT_DIR: agentDir });
 
@@ -163,6 +183,8 @@ describe("Claude-free OMP inference", () => {
 		expect(installStdout).toContain("5 added");
 		expect(existsSync(join(agentDir, "config.yml"))).toBe(true);
 		expect(existsSync(join(agentDir, "APPEND_SYSTEM.md"))).toBe(true);
+		expect(existsSync(join(home, "agent", "config.yml"))).toBe(false);
+		expect(existsSync(join(home, "agent", "APPEND_SYSTEM.md"))).toBe(false);
 
 		const status = Bun.spawn([process.execPath, managePath, "status"], {
 			env,
@@ -173,6 +195,72 @@ describe("Claude-free OMP inference", () => {
 		expect(await status.exited).toBe(0);
 		expect(statusStdout).not.toContain("✗");
 		expect(statusStdout).toContain("omp (automatic OMP default) — intelligence layer runs Claude-free");
+	});
+	test("reviews the transcript belonging to the stopping OMP session", async () => {
+		const home = mkdtempSync(join(tmpdir(), "lifeos-memory-review-transcript-"));
+		tempDirs.push(home);
+		stageCorePrerequisites(home);
+		const lifeosDir = join(home, ".claude", "LIFEOS");
+		const configDir = join(lifeosDir, "USER", "CONFIG");
+		const reviewerPath = join(lifeosDir, "TOOLS", "MemoryReviewer.ts");
+		const transcriptPath = join(home, "sessions", "session-one.jsonl");
+		const argsCapture = join(home, "reviewer-args.json");
+		mkdirSync(configDir, { recursive: true });
+		mkdirSync(join(home, "sessions"), { recursive: true });
+		writeFileSync(join(configDir, "memory-review.json"), JSON.stringify({
+			turn_threshold: 1,
+			min_minutes_between: 0,
+		}));
+		writeFileSync(transcriptPath, "{\"type\":\"message\",\"role\":\"user\",\"content\":\"session one\"}\n");
+		writeFileSync(
+			reviewerPath,
+			"await Bun.write(process.env.MEMORY_REVIEW_ARGS!, JSON.stringify(Bun.argv.slice(2)));",
+		);
+
+		const indexPath = join(import.meta.dir, "index.ts");
+		const probe = [
+			`const extension = await import(${JSON.stringify(indexPath)});`,
+			"const handlers = new Map();",
+			"extension.default({ on: (name, handler) => handlers.set(name, handler), setLabel: () => undefined });",
+			"await handlers.get('session_stop')({}, {",
+			"  cwd: process.cwd(),",
+			"  sessionManager: {",
+			"    getSessionId: () => 'omp-session-one',",
+			"    getSessionFile: () => process.env.OMP_TEST_TRANSCRIPT,",
+			"    getBranch: () => [{ role: 'assistant', content: [{ text: 'different session fallback' }] }],",
+			"  },",
+			"});",
+		].join("\n");
+		const env = profileEnv(home, {
+			MEMORY_REVIEW_ARGS: argsCapture,
+			OMP_TEST_TRANSCRIPT: transcriptPath,
+		});
+		delete env.CLAUDE_CODE_SUBAGENT_NAME;
+		delete env.CLAUDE_CODE_SUBAGENT_TYPE;
+		delete env.CLAUDE_AGENT_SDK;
+		const child = Bun.spawn([process.execPath, "--eval", probe], {
+			env,
+			stdout: "pipe",
+			stderr: "pipe",
+		});
+		const [stderr, exitCode] = await Promise.all([
+			new Response(child.stderr).text(),
+			child.exited,
+		]);
+		expect(exitCode).toBe(0);
+		expect(stderr).toBe("");
+
+		for (let attempt = 0; attempt < 50 && !existsSync(argsCapture); attempt++) {
+			await Bun.sleep(20);
+		}
+		expect(existsSync(argsCapture)).toBe(true);
+		expect(JSON.parse(readFileSync(argsCapture, "utf8"))).toEqual([
+			"review",
+			"--turns",
+			"1",
+			"--input",
+			transcriptPath,
+		]);
 	});
 	test("reports missing hook prerequisites instead of a healthy source", () => {
 		const home = mkdtempSync(join(tmpdir(), "lifeos-manage-missing-hooks-"));

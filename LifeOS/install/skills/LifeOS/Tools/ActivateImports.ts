@@ -11,7 +11,7 @@
  */
 
 import { join } from "node:path";
-import { activateImports, defaultConfigRoot, detectDevTree } from "./InstallEngine";
+import { activateImports, defaultConfigRoot, detectDevTree, resolveInstallerHome } from "./InstallEngine";
 
 function main(): void {
   const a = process.argv.slice(2);
@@ -19,7 +19,7 @@ function main(): void {
     const i = a.indexOf(f);
     return i >= 0 && a[i + 1] && !a[i + 1].startsWith("--") ? a[i + 1] : undefined;
   };
-  const home = process.env.HOME || "";
+  const home = resolveInstallerHome();
   const configRoot = get("--config-root") || defaultConfigRoot(home);
   const apply = a.includes("--apply");
   const allowDev = a.includes("--allow-dev");
@@ -51,7 +51,7 @@ function main(): void {
       const rel = imp.replace(/^@/, "");
       (existsSync(join(configRoot, rel)) ? wouldActivate : wouldSkip).push(imp);
     }
-    console.log(JSON.stringify({ ok: true, dryRun: true, wouldActivate, wouldSkip }, null, 2));
+    console.log(JSON.stringify({ ok: true, dryRun: true, configRoot, wouldActivate, wouldSkip }, null, 2));
     process.exit(0);
   }
 

@@ -183,6 +183,13 @@ export function detectHarness(home: string): HarnessInfo {
 }
 
 /** Resolve the install target without assuming Claude Code on unknown harnesses. */
+export function resolveInstallerHome(
+  env: Record<string, string | undefined> = process.env,
+  nativeHome = homedir(),
+): string {
+  return env.HOME?.trim() || nativeHome;
+}
+
 export function defaultConfigRoot(home = homedir()): string {
   return process.env.LIFEOS_CONFIG_ROOT || detectHarness(home).configRoot || join(home, ".lifeos");
 }

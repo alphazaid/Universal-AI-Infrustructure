@@ -163,19 +163,33 @@ function isLikelySubagent(): boolean {
 	);
 }
 
-let pulseUp: boolean | undefined;
-let pulseCheckedAt = 0;
-async function pulseAvailable(): Promise<boolean> {
-	if (pulseUp === true || (pulseUp === false && Date.now() - pulseCheckedAt < 5000)) return pulseUp;
-	try {
-		const res = await fetch("http://localhost:31337/", { signal: AbortSignal.timeout(1000) });
-		pulseUp = res.status >= 200 && res.status < 400;
-	} catch {
-		pulseUp = false;
-	}
-	pulseCheckedAt = Date.now();
-	return pulseUp;
+export function createPulseAvailabilityProbe(options: {
+	probe?: () => Promise<boolean>;
+	now?: () => number;
+	retryAfterMs?: number;
+} = {}): () => Promise<boolean> {
+	const probe = options.probe ?? (async () => {
+		const response = await fetch("http://localhost:31337/", { signal: AbortSignal.timeout(1000) });
+		return response.status >= 200 && response.status < 400;
+	});
+	const now = options.now ?? Date.now;
+	const retryAfterMs = options.retryAfterMs ?? 5000;
+	let pulseUp: boolean | undefined;
+	let pulseCheckedAt = 0;
+
+	return async () => {
+		if (pulseUp === true || (pulseUp === false && now() - pulseCheckedAt < retryAfterMs)) return pulseUp;
+		try {
+			pulseUp = await probe();
+		} catch {
+			pulseUp = false;
+		}
+		pulseCheckedAt = now();
+		return pulseUp;
+	};
 }
+
+const pulseAvailable = createPulseAvailabilityProbe();
 
 function parseHookJson(out: string): HookOutcome {
 	let parsed: unknown;

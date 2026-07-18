@@ -142,8 +142,12 @@ const ompVersionPromise: Promise<string> = (() => {
  * the panel can never drift from the CC statusline because it IS the CC
  * statusline.
  */
-async function runStatusLine(ctx: ExtensionCtx, usage: ContextUsage | undefined): Promise<string[]> {
-	if (!BASH) return [];
+async function runStatusLine(
+	ctx: ExtensionCtx,
+	usage: ContextUsage | undefined,
+	bash: string | null = BASH,
+): Promise<string[]> {
+	if (!bash) return [];
 	const version = await ompVersionPromise;
 	const { promise, resolve } = Promise.withResolvers<string[]>();
 	const stdin = JSON.stringify({
@@ -157,7 +161,7 @@ async function runStatusLine(ctx: ExtensionCtx, usage: ContextUsage | undefined)
 			total_input_tokens: usage?.tokens ?? 0,
 		},
 	});
-	const proc = spawn(BASH, [STATUSLINE_SCRIPT], {
+	const proc = spawn(bash, [STATUSLINE_SCRIPT], {
 		env: { ...process.env, LIFEOS_HARNESS: "omp" },
 		stdio: ["pipe", "pipe", "ignore"],
 	});
@@ -217,64 +221,76 @@ export function depthTagForSession(
 	}
 }
 
-export default function lifeosObservability(pi: ExtensionApi): void {
+export default function lifeosObservability(
+	pi: ExtensionApi,
+	options: { bash?: string | null } = {},
+): void {
 	pi.setLabel?.("LifeOS Observability");
 
-	let toolCount = 0;
-	let failCount = 0;
-	// Slug of the ISA THIS session last touched (from tool paths under MEMORY/WORK/<slug>/).
-	// Keys the depth indicator to our own session — work.json is shared across every
-	// harness session, so "most recent row" would show another tab's Algorithm phase.
-	let sessionSlug = "";
+	const bash = options.bash === undefined ? BASH : options.bash;
+	const sessionStates = new Map<string, {
+		toolCount: number;
+		failCount: number;
+		sessionSlug: string;
+		paintingPanel: boolean;
+	}>();
 
-	function noteSlugFromEvent(event: unknown): void {
-		sessionSlug = workSlugFromToolEvent(event) || sessionSlug;
+	function stateFor(ctx: ExtensionCtx) {
+		const id = sessionId(ctx);
+		let state = sessionStates.get(id);
+		if (!state) {
+			state = { toolCount: 0, failCount: 0, sessionSlug: "", paintingPanel: false };
+			sessionStates.set(id, state);
+		}
+		return state;
 	}
 
-	/**
-	 * Depth indicator — the 7.x-native answer to "which mode was picked": the
-	 * Algorithm writes phase/effort to MEMORY/STATE/work.json as it runs (ISASync).
-	 * Show `ALGO <phase> <effort>` for THIS session's live ISA; otherwise show
-	 * `DIRECT`. Deterministic (file state, not model claims).
-	 */
-	function depthTag(): string {
-		return depthTagForSession(sessionSlug);
+	function noteSlugFromEvent(event: unknown, ctx: ExtensionCtx): void {
+		const state = stateFor(ctx);
+		state.sessionSlug = workSlugFromToolEvent(event) || state.sessionSlug;
+	}
+
+	function depthTag(ctx: ExtensionCtx): string {
+		return depthTagForSession(stateFor(ctx).sessionSlug);
 	}
 
 	function paintStatus(ctx: ExtensionCtx): void {
 		if (!ctx.hasUI) return;
-		const fails = failCount > 0 ? ` ✗${failCount}` : "";
-		ctx.ui?.setStatus?.("lifeos", `LifeOS · 🔧${toolCount}${fails}${depthTag()}`);
+		const state = stateFor(ctx);
+		const fails = state.failCount > 0 ? ` ✗${state.failCount}` : "";
+		ctx.ui?.setStatus?.("lifeos", `LifeOS · 🔧${state.toolCount}${fails}${depthTag(ctx)}`);
 	}
 
-	// ── Full statusline panel (the CC statusline, rendered as an OMP widget) ──
-	// Default ON when the script exists; `/statusline off` writes the opt-out marker.
-	let paintingPanel = false;
 	async function paintPanel(ctx: ExtensionCtx): Promise<void> {
 		if (!ctx.hasUI || !ctx.ui?.setWidget) return;
-		if (!BASH || !existsSync(STATUSLINE_SCRIPT) || existsSync(STATUSLINE_OFF_MARKER)) {
+		if (!bash || !existsSync(STATUSLINE_SCRIPT) || existsSync(STATUSLINE_OFF_MARKER)) {
 			ctx.ui.setWidget("lifeos-statusline", undefined);
 			return;
 		}
-		if (paintingPanel) return; // one render in flight; turn_end will re-fire
-		paintingPanel = true;
+		const state = stateFor(ctx);
+		if (state.paintingPanel) return;
+		state.paintingPanel = true;
 		try {
-			// getContextUsage is sync in interactive mode, async in print mode —
-			// await normalizes both; NEVER chain .catch on its return.
 			let usage: ContextUsage | undefined;
 			try { usage = await ctx.getContextUsage?.(); } catch { usage = undefined; }
-			const lines = await runStatusLine(ctx, usage);
-			if (lines.length > 0) ctx.ui.setWidget("lifeos-statusline", distillPanel(lines), { placement: "belowEditor" });
+			const lines = await runStatusLine(ctx, usage, bash);
+			if (lines.length > 0) {
+				ctx.ui.setWidget("lifeos-statusline", distillPanel(lines), { placement: "belowEditor" });
+			}
 		} catch {
 			/* statusline must never break a turn */
 		} finally {
-			paintingPanel = false;
+			state.paintingPanel = false;
 		}
 	}
 
 	pi.on("session_start", (_event, ctx) => {
+		stateFor(ctx);
 		paintStatus(ctx);
 		void paintPanel(ctx);
+	});
+	pi.on("session_shutdown", (_event, ctx) => {
+		sessionStates.delete(sessionId(ctx));
 	});
 	pi.on("turn_end", (_event, ctx) => {
 		void paintPanel(ctx);
@@ -284,7 +300,8 @@ export default function lifeosObservability(pi: ExtensionApi): void {
 		description: "LifeOS statusline panel: /statusline on|off|refresh",
 		handler: (args, ctx) => {
 			const want = (typeof args === "string" ? args : "").trim().toLowerCase();
-			if (!BASH) {
+			if (!bash) {
+				ctx.ui?.setWidget?.("lifeos-statusline", undefined);
 				ctx.ui?.notify?.("LifeOS statusline unavailable: bash is not installed", "warning");
 				return;
 			}
@@ -303,10 +320,10 @@ export default function lifeosObservability(pi: ExtensionApi): void {
 		},
 	});
 
-	// ToolActivityTracker parity — one event per completed tool execution.
 	pi.on("tool_execution_end", (event, ctx) => {
-		toolCount++;
-		noteSlugFromEvent(readField(event, "data") ?? event);
+		const state = stateFor(ctx);
+		state.toolCount++;
+		noteSlugFromEvent(readField(event, "data") ?? event, ctx);
 		appendJsonl(ACTIVITY_FILE, {
 			timestamp: new Date().toISOString(),
 			type: "tool_use",
@@ -318,10 +335,10 @@ export default function lifeosObservability(pi: ExtensionApi): void {
 		paintStatus(ctx);
 	});
 
-	// ToolFailureTracker parity — errored tool results.
 	pi.on("tool_result", (event, ctx) => {
 		if (readField(event, "isError") !== true) return undefined;
-		failCount++;
+		const state = stateFor(ctx);
+		state.failCount++;
 		const content = readField(event, "content");
 		let error = "unknown error";
 		if (Array.isArray(content)) {
